@@ -160,7 +160,7 @@ else
 
     # Add sanitizers
     AC_SUBST(CFLAGS, "${CFLAGS} -fsanitize=undefined")
-    AC_SUBST(LIBS, "${LIBS} -lubsan")
+    AC_SUBST(LDFLAGS, "${LDFLAGS} -fsanitize=undefined")
 
     # Add additional warnings
     AC_SUBST(CFLAGS, "${CFLAGS} -Wwrite-strings -Wconversion -Wformat=2 -Wformat-nonliteral -Wstrict-prototypes -Wpointer-arith")
