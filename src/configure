@@ -4379,6 +4379,12 @@ else
 fi
 
 
+    # Add sanitizers
+    CFLAGS="${CFLAGS} -fsanitize=undefined"
+
+    LIBS="${LIBS} -lubsan"
+
+
     # Add additional warnings
     CFLAGS="${CFLAGS} -Wwrite-strings -Wconversion -Wformat=2 -Wformat-nonliteral -Wstrict-prototypes -Wpointer-arith"
 
@@ -5672,4 +5678,4 @@ if test -n "$ac_unrecognized_opts" && test "$enable_option_checking" != no; then
 $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
 fi
 
-# Generated from src/build/configure.ac sha1 be32eabb6aa7455f0d7fef197fe6cf57e4adc33b
+# Generated from src/build/configure.ac sha1 d8e9cbaf5a9407083022a467dd13032baa00e200

@@ -158,6 +158,10 @@ else
     AX_CHECK_COMPILE_FLAG([-Wduplicated-branches], [AC_SUBST(CFLAGS, "${CFLAGS} -Wduplicated-branches")], [], [-Werror])
     AX_CHECK_COMPILE_FLAG([-Wduplicated-cond], [AC_SUBST(CFLAGS, "${CFLAGS} -Wduplicated-cond")], [], [-Werror])
 
+    # Add sanitizers
+    AC_SUBST(CFLAGS, "${CFLAGS} -fsanitize=undefined")
+    AC_SUBST(LIBS, "${LIBS} -lubsan")
+
     # Add additional warnings
     AC_SUBST(CFLAGS, "${CFLAGS} -Wwrite-strings -Wconversion -Wformat=2 -Wformat-nonliteral -Wstrict-prototypes -Wpointer-arith")
     AC_SUBST(CFLAGS, "${CFLAGS} -Wvla")
