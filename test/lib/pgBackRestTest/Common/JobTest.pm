@@ -727,7 +727,7 @@ sub run
                         'valgrind -q --gen-suppressions=all' .
                         ($self->{oStorageTest}->exists($strValgrindSuppress) ? " --suppressions=${strValgrindSuppress}" : '') .
                         " --exit-on-first-error=yes --leak-check=full --leak-resolution=high --error-exitcode=25" . ' ' : '') .
-                        "./test.bin 2>&1" .
+                        "./test.bin" .
                     ($self->{oTest}->{&TEST_VM} ne VM_NONE ? "'" : '');
             }
             else
@@ -754,7 +754,7 @@ sub run
             }
 
             my $oExec = new pgBackRestTest::Common::ExecuteTest(
-                $strCommand, {bSuppressError => true, bShowOutputAsync => $self->{bShowOutputAsync}});
+                $strCommand, {bShowOutputAsync => $self->{bShowOutputAsync}});
 
             $oExec->begin();
 
