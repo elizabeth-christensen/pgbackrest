@@ -159,8 +159,8 @@ else
     AX_CHECK_COMPILE_FLAG([-Wduplicated-cond], [AC_SUBST(CFLAGS, "${CFLAGS} -Wduplicated-cond")], [], [-Werror])
 
     # Add sanitizers
-    AC_SUBST(CFLAGS, "${CFLAGS} -fsanitize=undefined -fno-sanitize-recover=undefined")
-    AC_SUBST(LDFLAGS, "${LDFLAGS} -fsanitize=undefined -fno-sanitize-recover=undefined")
+    AC_SUBST(CFLAGS, "${CFLAGS} -fsanitize=undefined -fsanitize=address -fno-sanitize=alignment")
+    AC_SUBST(LDFLAGS, "${LDFLAGS} -fsanitize=undefined -fsanitize=address")
 
     # Add additional warnings
     AC_SUBST(CFLAGS, "${CFLAGS} -Wwrite-strings -Wconversion -Wformat=2 -Wformat-nonliteral -Wstrict-prototypes -Wpointer-arith")

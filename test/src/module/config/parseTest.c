@@ -1014,10 +1014,10 @@ testRun(void)
         strLstAddZ(argList, TEST_BACKREST_EXE);
         strLstAddZ(argList, TEST_COMMAND_BACKUP);
         hrnCfgArgRawZ(argList, cfgOptStanza, "db");
-        hrnCfgArgRawZ(argList, cfgOptManifestSaveThreshold, "999999999999999999p");
+        hrnCfgArgRawZ(argList, cfgOptManifestSaveThreshold, "999t");
         TEST_ERROR(
             configParse(storageTest, strLstSize(argList), strLstPtr(argList), false), OptionInvalidValueError,
-            "'999999999999999999p' is out of range for 'manifest-save-threshold' option");
+            "'999t' is out of range for 'manifest-save-threshold' option");
 
         // -------------------------------------------------------------------------------------------------------------------------
         TEST_TITLE("value missing");
