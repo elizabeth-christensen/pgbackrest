@@ -90,6 +90,13 @@ Determine the alignment of a data type
 
 This macro reduces to a constant so it is safe to use anywhere a constant is allowed, e.g. a switch statement case.
 ***********************************************************************************************************************************/
-#define ALIGNOF(type) ((size_t)&((struct {char c; type t;} *)0)->t)
+#define ALIGN_OF(type) ((size_t)&((struct {char c; type t;} *)0)->t)
+
+/***********************************************************************************************************************************
+Determine the byte offset required to align a type after an arbitrary number of bytes
+
+This is useful for determining how to correctly align a type in a buffer that is being dynamically built up like a struct.
+***********************************************************************************************************************************/
+#define ALIGN_OFFSET(type, bytes) (ALIGN_OF(type) - ((bytes) % ALIGN_OF(type)))
 
 #endif

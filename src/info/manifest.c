@@ -319,9 +319,7 @@ manifestFilePack(const Manifest *const manifest, const ManifestFile *const file)
 
     uint8_t *const result = memNew(
         sizeof(StringPub) + nameSize + bufferPos + (file->checksumPageErrorList != NULL ?
-            ALIGNOF(StringPub) - ((nameSize + bufferPos) % ALIGNOF(StringPub)) + sizeof(StringPub) +
-                strSize(file->checksumPageErrorList) + 1 :
-            0));
+            ALIGN_OFFSET(StringPub, nameSize + bufferPos) + sizeof(StringPub) + strSize(file->checksumPageErrorList) + 1 : 0));
 
     // Create string object for the file name
     *(StringPub *)result = (StringPub){.size = (unsigned int)strSize(file->name), .buffer = (char *)result + sizeof(StringPub)};
@@ -336,7 +334,7 @@ manifestFilePack(const Manifest *const manifest, const ManifestFile *const file)
     // Create string object for the checksum error list
     if (file->checksumPageErrorList != NULL)
     {
-        resultPos += bufferPos + ALIGNOF(StringPub) - ((nameSize + bufferPos) % ALIGNOF(StringPub));
+        resultPos += bufferPos + ALIGN_OFFSET(StringPub, nameSize + bufferPos);
 
         *(StringPub *)(result + resultPos) = (StringPub)
             {.size = (unsigned int)strSize(file->checksumPageErrorList), .buffer = (char *)result + resultPos + sizeof(StringPub)};
@@ -418,8 +416,7 @@ manifestFileUnpack(const Manifest *const manifest, const ManifestFilePack *const
     result.checksumPageError = flag & (1 << manifestFilePackFlagChecksumPageError) ? true : false;
 
     if (flag & (1 << manifestFilePackFlagChecksumPageErrorList))
-        result.checksumPageErrorList =
-            (const String *)((const uint8_t *)filePack + bufferPos + (ALIGNOF(StringPub) - (bufferPos % ALIGNOF(StringPub))));
+        result.checksumPageErrorList = (const String *)((const uint8_t *)filePack + bufferPos + ALIGN_OFFSET(StringPub, bufferPos));
 
     FUNCTION_TEST_RETURN(result);
 }
