@@ -754,7 +754,7 @@ sub run
             }
 
             my $oExec = new pgBackRestTest::Common::ExecuteTest(
-                $strCommand, {bShowOutputAsync => $self->{bShowOutputAsync}});
+                $strCommand, {bSuppressError => true, bShowOutputAsync => $self->{bShowOutputAsync}});
 
             $oExec->begin();
 
@@ -833,20 +833,20 @@ sub end
         my $fTestElapsedTime = ceil((gettimeofday() - $self->{oProcess}{start_time}) * 100) / 100;
 
         # Output error
-        if ($iExitStatus != 0)
+        if ($iExitStatus != 0 || (defined($oExecDone->{strErrorLog}) && $oExecDone->{strErrorLog} ne ''))
         {
             # Get stdout
             my $strOutput = trim($oExecDone->{strOutLog}) ? "STDOUT:\n" . trim($oExecDone->{strOutLog}) : '';
 
             # Get stderr
-            if (trim($oExecDone->{strSuppressedErrorLog}) ne '')
+            if (defined($oExecDone->{strErrorLog}) && trim($oExecDone->{strErrorLog}) ne '')
             {
                 if ($strOutput ne '')
                 {
                     $strOutput .= "\n";
                 }
 
-                $strOutput .= "STDERR:\n" . trim($oExecDone->{strSuppressedErrorLog});
+                $strOutput .= "STDERR:\n" . trim($oExecDone->{strErrorLog});
             }
 
             # If no stdout or stderr output something rather than a blank line

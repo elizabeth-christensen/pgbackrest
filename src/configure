@@ -4380,9 +4380,9 @@ fi
 
 
     # Add sanitizers
-    CFLAGS="${CFLAGS} -fsanitize=undefined"
+    CFLAGS="${CFLAGS} -fsanitize=undefined -fno-sanitize-recover=undefined"
 
-    LDFLAGS="${LDFLAGS} -fsanitize=undefined"
+    LDFLAGS="${LDFLAGS} -fsanitize=undefined -fno-sanitize-recover=undefined"
 
 
     # Add additional warnings
@@ -5678,4 +5678,4 @@ if test -n "$ac_unrecognized_opts" && test "$enable_option_checking" != no; then
 $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
 fi
 
-# Generated from src/build/configure.ac sha1 709abbcc755e7b900f895595e55005cf258e0753
+# Generated from src/build/configure.ac sha1 a7bf0beee4fbea1bef765baf46be80a87222242b
