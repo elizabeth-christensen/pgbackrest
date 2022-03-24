@@ -86,7 +86,9 @@ Adapted from PostgreSQL src/include/c.h.
 #endif
 
 /***********************************************************************************************************************************
-Determine the alignment of a data type !!!
+Determine the alignment of a data type
+
+This macro reduces to a constant so it is safe to use anywhere a constant is allowed, e.g. a switch statement case.
 ***********************************************************************************************************************************/
 #define ALIGNOF(type) ((size_t)&((struct {char c; type t;} *)0)->t)
 
