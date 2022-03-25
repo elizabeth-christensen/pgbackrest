@@ -575,8 +575,8 @@ testRun(void)
         TEST_TITLE("dry-run valid, dry-run");
 
         hrnCfgArgRawBool(argList, cfgOptDryRun, true);
-        TEST_RESULT_VOID(cfgLoad(strLstSize(argList), strLstPtr(argList)), "load config");
 
+        TEST_RESULT_VOID(cfgLoad(strLstSize(argList), strLstPtr(argList)), "load config");
         TEST_ERROR(
             storageRepoWrite(), AssertError, "unable to get writable storage in dry-run mode or before dry-run is initialized");
         lockRelease(true);
