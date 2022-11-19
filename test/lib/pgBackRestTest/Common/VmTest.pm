@@ -183,12 +183,34 @@ my $oyVm =
         ],
     },
 
+    # Ubuntu 16.04
+    'u16' =>
+    {
+        &VM_OS_BASE => VM_OS_BASE_DEBIAN,
+        &VM_IMAGE => 'ubuntu:16.04',
+        &VM_ARCH => VM_ARCH_AMD64,
+        &VMDEF_PGSQL_BIN => '/usr/lib/postgresql/{[version]}/bin',
+
+        &VMDEF_WITH_BACKTRACE => true,
+        &VMDEF_WITH_ZST => true,
+
+        &VM_DB =>
+        [
+            PG_VERSION_94,
+        ],
+
+        &VM_DB_TEST =>
+        [
+            PG_VERSION_94,
+        ],
+    },
+
     # Ubuntu 18.04
     &VM_U18 =>
     {
         &VM_OS_BASE => VM_OS_BASE_DEBIAN,
-        &VM_IMAGE => 'i386/ubuntu:18.04',
-        &VM_ARCH => VM_ARCH_I386,
+        &VM_IMAGE => 'ubuntu:18.04',
+        &VM_ARCH => VM_ARCH_AMD64,
         &VMDEF_PGSQL_BIN => '/usr/lib/postgresql/{[version]}/bin',
 
         &VMDEF_WITH_BACKTRACE => true,
