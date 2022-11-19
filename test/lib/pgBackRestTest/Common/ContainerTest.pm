@@ -51,7 +51,7 @@ use constant CERT_FAKE_SERVER_KEY                                   => CERT_FAKE
 ####################################################################################################################################
 # Container Debug - speeds container debugging by splitting each section into a separate intermediate container
 ####################################################################################################################################
-use constant CONTAINER_DEBUG                                        => false;
+use constant CONTAINER_DEBUG                                        => true;
 
 ####################################################################################################################################
 # Store cache container checksums

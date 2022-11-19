@@ -189,17 +189,8 @@ my $oyVm =
         &VM_OS_BASE => VM_OS_BASE_DEBIAN,
         &VM_IMAGE => 'ubuntu:16.04',
         &VM_ARCH => VM_ARCH_AMD64,
+        &VM_DEPRECATED => true,
         &VMDEF_PGSQL_BIN => '/usr/lib/postgresql/{[version]}/bin',
-
-        &VM_DB =>
-        [
-            PG_VERSION_94,
-        ],
-
-        &VM_DB_TEST =>
-        [
-            PG_VERSION_94,
-        ],
     },
 
     # Ubuntu 18.04
