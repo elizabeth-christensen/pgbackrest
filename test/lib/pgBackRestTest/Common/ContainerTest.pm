@@ -577,8 +577,8 @@ sub containerBuild
 
         # Test image
         ########################################################################################################################
-        if (!$bDeprecated)
-        {
+        # if (!$bDeprecated)
+        # {
             $strImageParent = containerRepo() . ":${strOS}-base";
             $strImage = "${strOS}-test";
 
@@ -642,7 +642,7 @@ sub containerBuild
 
             containerWrite(
                 $oStorageDocker, $strTempPath, $strOS, 'Test', $strImageParent, $strImage, $strCopy, $strScript, $bVmForce);
-        }
+        # }
     }
 
     &log(INFO, "Build Complete");
