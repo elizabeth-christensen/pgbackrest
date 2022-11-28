@@ -396,7 +396,7 @@ sub containerBuild
                 "        libdbd-pg-perl libhtml-parser-perl libssl-dev libperl-dev \\\n" .
                 "        libyaml-libyaml-perl tzdata devscripts lintian libxml-checker-perl txt2man debhelper \\\n" .
                 "        libppi-html-perl libtemplate-perl libtest-differences-perl zlib1g-dev libxml2-dev pkg-config \\\n" .
-                "        libbz2-dev bzip2 libyaml-dev libjson-pp-perl liblz4-dev liblz4-tool gnupg lsb-release ccache meson";
+                "        libbz2-dev bzip2 libyaml-dev libjson-pp-perl liblz4-dev liblz4-tool gnupg lsb-release ccache meson libpq-dev";
 
             # This package is required to build valgrind on 32-bit
             if ($oVm->{$strOS}{&VM_ARCH} eq VM_ARCH_I386)
