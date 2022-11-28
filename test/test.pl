@@ -576,28 +576,28 @@ eval
         &log(INFO, (!-e $strBuildNinja ? 'clean ' : '') . 'autogenerate code');
 
         # Setup build if it does not exist
-        my $strGenerateCommand =
-            "ninja -C ${strBuildPath} src/build-code test/src/test-pgbackrest" .
-            ($bMinGen ? '' : " && \\\n${strBuildPath}/src/build-code config ${strBackRestBase}/src") .
-            ($bMinGen ? '' : " && \\\n${strBuildPath}/src/build-code error ${strBackRestBase}/src") .
-            " && \\\n${strBuildPath}/src/build-code postgres ${strBackRestBase}/src ${strRepoCachePath}";
+        # my $strGenerateCommand =
+        #     "ninja -C ${strBuildPath} src/build-code test/src/test-pgbackrest" .
+        #     ($bMinGen ? '' : " && \\\n${strBuildPath}/src/build-code config ${strBackRestBase}/src") .
+        #     ($bMinGen ? '' : " && \\\n${strBuildPath}/src/build-code error ${strBackRestBase}/src") .
+        #     " && \\\n${strBuildPath}/src/build-code postgres ${strBackRestBase}/src ${strRepoCachePath}";
 
-        if (!-e $strBuildNinja)
-        {
-            $strGenerateCommand =
-                "meson setup -Dwerror=true -Dfatal-errors=true -Dbuildtype=debug ${strBuildPath} ${strBackRestBase} && \\\n" .
-                $strGenerateCommand;
-        }
+        # if (!-e $strBuildNinja)
+        # {
+        #     $strGenerateCommand =
+        #         "meson setup -Dwerror=true -Dfatal-errors=true -Dbuildtype=debug ${strBuildPath} ${strBackRestBase} && \\\n" .
+        #         $strGenerateCommand;
+        # }
 
-        # Build code
-        executeTest(
-            ($strVm ne VM_NONE ? "docker exec -i -u ${\TEST_USER} test-build bash -l -c ' \\\n" : '') .
-            $strGenerateCommand . ($strVm ne VM_NONE ? "'" : ''));
+        # # Build code
+        # executeTest(
+        #     ($strVm ne VM_NONE ? "docker exec -i -u ${\TEST_USER} test-build bash -l -c ' \\\n" : '') .
+        #     $strGenerateCommand . ($strVm ne VM_NONE ? "'" : ''));
 
-        if ($bGenOnly)
-        {
-            exit 0;
-        }
+        # if ($bGenOnly)
+        # {
+        #     exit 0;
+        # }
 
         # Make a copy of the repo to track which files have been changed
         #---------------------------------------------------------------------------------------------------------------------------
