@@ -32,7 +32,7 @@ typedef struct PgClient PgClient;
 /***********************************************************************************************************************************
 Constructors
 ***********************************************************************************************************************************/
-PgClient *pgClientNew(
+FN_EXTERN PgClient *pgClientNew(
     const String *host, const unsigned int port, const String *database, const String *user, const TimeMSec timeout);
 
 /***********************************************************************************************************************************
@@ -86,7 +86,7 @@ pgClientTimeout(const PgClient *const this)
 Functions
 ***********************************************************************************************************************************/
 // Open connection to PostgreSQL
-PgClient *pgClientOpen(PgClient *this);
+FN_EXTERN PgClient *pgClientOpen(PgClient *this);
 
 // Move to a new parent mem context
 FN_INLINE_ALWAYS PgClient *
@@ -96,10 +96,10 @@ pgClientMove(PgClient *const this, MemContext *const parentNew)
 }
 
 // Execute a query and return results
-Pack *pgClientQuery(PgClient *this, const String *query, PgClientQueryResult resultType);
+FN_EXTERN Pack *pgClientQuery(PgClient *this, const String *query, PgClientQueryResult resultType);
 
 // Close connection to PostgreSQL
-void pgClientClose(PgClient *this);
+FN_EXTERN void pgClientClose(PgClient *this);
 
 /***********************************************************************************************************************************
 Destructor
@@ -113,11 +113,11 @@ pgClientFree(PgClient *const this)
 /***********************************************************************************************************************************
 Macros for function logging
 ***********************************************************************************************************************************/
-String *pgClientToLog(const PgClient *this);
+FN_EXTERN void pgClientToLog(const PgClient *this, StringStatic *debugLog);
 
 #define FUNCTION_LOG_PG_CLIENT_TYPE                                                                                                \
     PgClient *
 #define FUNCTION_LOG_PG_CLIENT_FORMAT(value, buffer, bufferSize)                                                                   \
-    FUNCTION_LOG_STRING_OBJECT_FORMAT(value, pgClientToLog, buffer, bufferSize)
+    FUNCTION_LOG_OBJECT_FORMAT(value, pgClientToLog, buffer, bufferSize)
 
 #endif

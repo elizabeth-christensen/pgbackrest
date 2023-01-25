@@ -20,7 +20,7 @@ typedef struct HttpSession HttpSession;
 /***********************************************************************************************************************************
 Constructors
 ***********************************************************************************************************************************/
-HttpSession *httpSessionNew(HttpClient *client, IoSession *session);
+FN_EXTERN HttpSession *httpSessionNew(HttpClient *client, IoSession *session);
 
 /***********************************************************************************************************************************
 Functions
@@ -33,7 +33,7 @@ httpSessionMove(HttpSession *const this, MemContext *const parentNew)
 }
 
 // Work with the session has finished cleanly and it can be reused
-void httpSessionDone(HttpSession *this);
+FN_EXTERN void httpSessionDone(HttpSession *this);
 
 /***********************************************************************************************************************************
 Getters/Setters
@@ -48,10 +48,10 @@ typedef struct HttpSessionIoReadParam
 #define httpSessionIoReadP(this, ...)                                                                                                \
     httpSessionIoRead(this, (HttpSessionIoReadParam){VAR_PARAM_INIT, __VA_ARGS__})
 
-IoRead *httpSessionIoRead(HttpSession *this, HttpSessionIoReadParam param);
+FN_EXTERN IoRead *httpSessionIoRead(HttpSession *this, HttpSessionIoReadParam param);
 
 // Write interface
-IoWrite *httpSessionIoWrite(HttpSession *this);
+FN_EXTERN IoWrite *httpSessionIoWrite(HttpSession *this);
 
 /***********************************************************************************************************************************
 Destructor
@@ -68,6 +68,6 @@ Macros for function logging
 #define FUNCTION_LOG_HTTP_SESSION_TYPE                                                                                             \
     HttpSession *
 #define FUNCTION_LOG_HTTP_SESSION_FORMAT(value, buffer, bufferSize)                                                                \
-    objToLog(value, "HttpSession", buffer, bufferSize)
+    objNameToLog(value, "HttpSession", buffer, bufferSize)
 
 #endif

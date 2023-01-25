@@ -140,7 +140,7 @@ Get the postgres database and storage objects
 #define FUNCTION_LOG_BACKUP_DATA_TYPE                                                                                              \
     BackupData *
 #define FUNCTION_LOG_BACKUP_DATA_FORMAT(value, buffer, bufferSize)                                                                 \
-    objToLog(value, "BackupData", buffer, bufferSize)
+    objNameToLog(value, "BackupData", buffer, bufferSize)
 
 typedef struct BackupData
 {
@@ -169,25 +169,17 @@ backupInit(const InfoBackup *infoBackup)
         FUNCTION_LOG_PARAM(INFO_BACKUP, infoBackup);
     FUNCTION_LOG_END();
 
+    FUNCTION_AUDIT_HELPER();
+
     ASSERT(infoBackup != NULL);
 
     // Initialize for offline backup
     BackupData *result = memNew(sizeof(BackupData));
     *result = (BackupData){0};
 
-    // Check that the PostgreSQL version supports backup from standby. The check is done using the stanza info because pg_control
-    // cannot be loaded until a primary is found -- which will also lead to an error if the version does not support standby. If the
-    // pg_control version does not match the stanza version then there will be an error further down.
+    // Don't allow backup from standby when offline
     InfoPgData infoPg = infoPgDataCurrent(infoBackupPg(infoBackup));
 
-    if (cfgOptionBool(cfgOptOnline) && cfgOptionBool(cfgOptBackupStandby) && infoPg.version < PG_VERSION_BACKUP_STANDBY)
-    {
-        THROW_FMT(
-            ConfigError, "option '" CFGOPT_BACKUP_STANDBY "' not valid for " PG_NAME " < %s",
-            strZ(pgVersionToStr(PG_VERSION_BACKUP_STANDBY)));
-    }
-
-    // Don't allow backup from standby when offline
     if (!cfgOptionBool(cfgOptOnline) && cfgOptionBool(cfgOptBackupStandby))
     {
         LOG_WARN(
@@ -239,13 +231,6 @@ backupInit(const InfoBackup *infoBackup)
             PG_NAME " version %s, system-id %" PRIu64 " do not match stanza version %s, system-id %" PRIu64 "\n"
             "HINT: is this the correct stanza?", strZ(pgVersionToStr(pgControl.version)), pgControl.systemId,
             strZ(pgVersionToStr(infoPg.version)), infoPg.systemId);
-    }
-
-    // Only allow stop auto in PostgreSQL >= 9.3
-    if (cfgOptionBool(cfgOptStopAuto) && result->version < PG_VERSION_93)
-    {
-        LOG_WARN(CFGOPT_STOP_AUTO " option is only available in " PG_NAME " >= " PG_VERSION_93_STR);
-        cfgOptionSet(cfgOptStopAuto, cfgSourceParam, BOOL_FALSE_VAR);
     }
 
     // If checksum page is not explicitly set then automatically enable it when checksums are available
@@ -583,7 +568,7 @@ backupResumeClean(
 
                             if (fileResume.reference != NULL)
                                 removeReason = "reference in resumed manifest";
-                            else if (fileResume.checksumSha1[0] == '\0')
+                            else if (fileResume.checksumSha1 == NULL)
                                 removeReason = "no checksum in resumed manifest";
                             else if (file.size != fileResume.size)
                                 removeReason = "mismatched size";
@@ -596,9 +581,11 @@ backupResumeClean(
                             {
                                 ASSERT(file.copy);
                                 ASSERT(file.bundleId == 0);
+                                ASSERT(file.blockIncrMapSize == 0);
 
                                 file.sizeRepo = fileResume.sizeRepo;
-                                memcpy(file.checksumSha1, fileResume.checksumSha1, HASH_TYPE_SHA1_SIZE_HEX + 1);
+                                file.checksumSha1 = fileResume.checksumSha1;
+                                file.checksumRepoSha1 = fileResume.checksumRepoSha1;
                                 file.checksumPage = fileResume.checksumPage;
                                 file.checksumPageError = fileResume.checksumPageError;
                                 file.checksumPageErrorList = fileResume.checksumPageErrorList;
@@ -833,6 +820,8 @@ backupStart(BackupData *backupData)
         FUNCTION_LOG_PARAM(BACKUP_DATA, backupData);
     FUNCTION_LOG_END();
 
+    FUNCTION_AUDIT_HELPER();
+
     BackupStartResult result = {.lsn = NULL};
 
     MEM_CONTEXT_TEMP_BEGIN()
@@ -936,6 +925,7 @@ backupFilePut(BackupData *backupData, Manifest *manifest, const String *name, ti
         MEM_CONTEXT_TEMP_BEGIN()
         {
             // Create file
+            bool repoChecksum = false;
             const String *manifestName = strNewFmt(MANIFEST_TARGET_PGDATA "/%s", strZ(name));
             CompressType compressType = compressTypeEnum(cfgOptionStrId(cfgOptCompressType));
 
@@ -956,11 +946,24 @@ backupFilePut(BackupData *backupData, Manifest *manifest, const String *name, ti
             {
                 ioFilterGroupAdd(
                     ioWriteFilterGroup(storageWriteIo(write)), compressFilter(compressType, cfgOptionInt(cfgOptCompressLevel)));
+
+                repoChecksum = true;
             }
 
             // Add encryption filter if required
-            cipherBlockFilterGroupAdd(
-                filterGroup, cfgOptionStrId(cfgOptRepoCipherType), cipherModeEncrypt, manifestCipherSubPass(manifest));
+            if (manifestCipherSubPass(manifest) != NULL)
+            {
+                ioFilterGroupAdd(
+                    ioWriteFilterGroup(storageWriteIo(write)),
+                    cipherBlockNewP(
+                        cipherModeEncrypt, cfgOptionStrId(cfgOptRepoCipherType), BUFSTR(manifestCipherSubPass(manifest))));
+
+                repoChecksum = true;
+            }
+
+            // Capture checksum of file stored in the repo if filters that modify the output have been applied
+            if (repoChecksum)
+                ioFilterGroupAdd(filterGroup, cryptoHashNew(hashTypeSha1));
 
             // Add size filter last to calculate repo size
             ioFilterGroupAdd(filterGroup, ioSizeNew());
@@ -981,11 +984,11 @@ backupFilePut(BackupData *backupData, Manifest *manifest, const String *name, ti
                 .size = strSize(content),
                 .sizeRepo = pckReadU64P(ioFilterGroupResultP(filterGroup, SIZE_FILTER_TYPE)),
                 .timestamp = timestamp,
+                .checksumSha1 = bufPtr(pckReadBinP(ioFilterGroupResultP(filterGroup, CRYPTO_HASH_FILTER_TYPE, .idx = 0))),
             };
 
-            memcpy(
-                file.checksumSha1, strZ(bufHex(pckReadBinP(ioFilterGroupResultP(filterGroup, CRYPTO_HASH_FILTER_TYPE)))),
-                HASH_TYPE_SHA1_SIZE_HEX + 1);
+            if (repoChecksum)
+                file.checksumRepoSha1 = bufPtr(pckReadBinP(ioFilterGroupResultP(filterGroup, CRYPTO_HASH_FILTER_TYPE, .idx = 1)));
 
             manifestFileAdd(manifest, &file);
 
@@ -1012,6 +1015,8 @@ backupStop(BackupData *backupData, Manifest *manifest)
         FUNCTION_LOG_PARAM(BACKUP_DATA, backupData);
         FUNCTION_LOG_PARAM(MANIFEST, manifest);
     FUNCTION_LOG_END();
+
+    FUNCTION_AUDIT_STRUCT();
 
     BackupStopResult result = {.lsn = NULL};
 
@@ -1061,6 +1066,8 @@ backupJobResultPageChecksumOut(VariantList *const result, const unsigned int pag
         FUNCTION_TEST_PARAM(UINT, pageEnd);
     FUNCTION_TEST_END();
 
+    FUNCTION_AUDIT_HELPER();
+
     // Output a single page
     if (pageBegin == pageEnd)
     {
@@ -1084,6 +1091,8 @@ backupJobResultPageChecksum(PackRead *const checksumPageResult)
     FUNCTION_LOG_BEGIN(logLevelDebug);
         FUNCTION_LOG_PARAM(PACK_READ, checksumPageResult);
     FUNCTION_LOG_END();
+
+    FUNCTION_AUDIT_HELPER();
 
     VariantList *result = NULL;
 
@@ -1183,8 +1192,10 @@ backupJobResult(
                 const BackupCopyResult copyResult = (BackupCopyResult)pckReadU32P(jobResult);
                 const uint64_t copySize = pckReadU64P(jobResult);
                 const uint64_t bundleOffset = pckReadU64P(jobResult);
+                const uint64_t blockIncrMapSize = pckReadU64P(jobResult);
                 const uint64_t repoSize = pckReadU64P(jobResult);
-                const String *const copyChecksum = pckReadStrP(jobResult);
+                const Buffer *const copyChecksum = pckReadBinP(jobResult);
+                const Buffer *const repoChecksum = pckReadBinP(jobResult);
                 PackRead *const checksumPageResult = pckReadPackReadP(jobResult);
 
                 // Increment backup copy progress
@@ -1207,7 +1218,8 @@ backupJobResult(
                     logProgress, "%s, %u.%02u%%", strZ(strSizeFormat(copySize)), percentComplete / 100, percentComplete % 100);
 
                 // Format log checksum
-                const String *const logChecksum = copySize != 0 ? strNewFmt(" checksum %s", strZ(copyChecksum)) : EMPTY_STR;
+                const String *const logChecksum = copySize != 0 ?
+                    strNewFmt(" checksum %s", strZ(strNewEncode(encodingHex, copyChecksum))) : EMPTY_STR;
 
                 // If the file is in a prior backup and nothing changed, just log it
                 if (copyResult == backupCopyResultNoOp)
@@ -1242,7 +1254,7 @@ backupJobResult(
                             " continue but this may be an issue unless the resumed backup path in the repository is known to be"
                             " corrupted.\n"
                             "NOTE: this does not indicate a problem with the PostgreSQL page checksums.",
-                            strZ(file.name), file.checksumSha1);
+                            strZ(file.name), strZ(strNewEncode(encodingHex, BUF(file.checksumSha1, HASH_TYPE_SHA1_SIZE))));
                     }
 
                     LOG_DETAIL_PID_FMT(processId, "backup file %s (%s)%s", strZ(fileLog), strZ(logProgress), strZ(logChecksum));
@@ -1323,13 +1335,15 @@ backupJobResult(
                     // Update file info and remove any reference to the file's existence in a prior backup
                     file.size = copySize;
                     file.sizeRepo = repoSize;
-                    memcpy(file.checksumSha1, strZ(copyChecksum), HASH_TYPE_SHA1_SIZE_HEX + 1);
+                    file.checksumSha1 = bufPtrConst(copyChecksum);
+                    file.checksumRepoSha1 = repoChecksum != NULL ? bufPtrConst(repoChecksum) : NULL;
                     file.reference = NULL;
                     file.checksumPageError = checksumPageError;
                     file.checksumPageErrorList = checksumPageErrorList != NULL ?
                         jsonFromVar(varNewVarLst(checksumPageErrorList)) : NULL;
                     file.bundleId = bundleId;
                     file.bundleOffset = bundleOffset;
+                    file.blockIncrMapSize = blockIncrMapSize;
 
                     manifestFileUpdate(manifest, &file);
                 }
@@ -1435,12 +1449,13 @@ typedef struct BackupJobData
     uint64_t bundleSize;                                            // Target bundle size
     uint64_t bundleLimit;                                           // Limit on files to bundle
     uint64_t bundleId;                                              // Bundle id
+    const bool blockIncr;                                           // Block incremental?
 
     List *queueList;                                                // List of processing queues
 } BackupJobData;
 
 // Identify files that must be copied from the primary
-bool
+static bool
 backupProcessFilePrimary(RegExp *const standbyExp, const String *const name)
 {
     FUNCTION_TEST_BEGIN();
@@ -1507,6 +1522,8 @@ backupProcessQueue(const BackupData *const backupData, Manifest *const manifest,
         FUNCTION_LOG_PARAM(MANIFEST, manifest);
         FUNCTION_LOG_PARAM_P(VOID, jobData);
     FUNCTION_LOG_END();
+
+    FUNCTION_AUDIT_HELPER();
 
     ASSERT(manifest != NULL);
 
@@ -1701,6 +1718,9 @@ static ProtocolParallelJob *backupJobCallback(void *data, unsigned int clientIdx
                     continue;
                 }
 
+                // Is this file a block incremental?
+                const bool blockIncr = jobData->blockIncr && file.blockIncrSize > 0;
+
                 // Add common parameters before first file
                 if (param == NULL)
                 {
@@ -1709,6 +1729,7 @@ static ProtocolParallelJob *backupJobCallback(void *data, unsigned int clientIdx
                     if (bundle && file.size <= jobData->bundleLimit)
                     {
                         pckWriteStrP(param, backupFileRepoPathP(jobData->backupLabel, .bundleId = jobData->bundleId));
+                        pckWriteU64P(param, jobData->bundleId);
                     }
                     else
                     {
@@ -1717,11 +1738,16 @@ static ProtocolParallelJob *backupJobCallback(void *data, unsigned int clientIdx
                         pckWriteStrP(
                             param,
                             backupFileRepoPathP(
-                                jobData->backupLabel, .manifestName = file.name, .compressType = jobData->compressType));
+                                jobData->backupLabel, .manifestName = file.name, .compressType = jobData->compressType,
+                                .blockIncr = blockIncr));
+                        pckWriteU64P(param, 0);
 
                         fileName = file.name;
                         bundle = false;
                     }
+
+                    // Provide the backup reference
+                    pckWriteU64P(param, strLstSize(manifestReferenceList(jobData->manifest)) - 1);
 
                     pckWriteU32P(param, jobData->compressType);
                     pckWriteI32P(param, jobData->compressLevel);
@@ -1734,9 +1760,32 @@ static ProtocolParallelJob *backupJobCallback(void *data, unsigned int clientIdx
                 pckWriteBoolP(param, !strEq(file.name, STRDEF(MANIFEST_TARGET_PGDATA "/" PG_PATH_GLOBAL "/" PG_FILE_PGCONTROL)));
                 pckWriteU64P(param, file.size);
                 pckWriteBoolP(param, !backupProcessFilePrimary(jobData->standbyExp, file.name));
-                pckWriteStrP(param, file.checksumSha1[0] != 0 ? STR(file.checksumSha1) : NULL);
+                pckWriteBinP(param, file.checksumSha1 != NULL ? BUF(file.checksumSha1, HASH_TYPE_SHA1_SIZE) : NULL);
                 pckWriteBoolP(param, file.checksumPage);
+
+                // If block incremental then provide the location of the prior map when available
+                if (blockIncr)
+                {
+                    pckWriteU64P(param, file.blockIncrSize);
+
+                    if (file.blockIncrMapSize != 0)
+                    {
+                        pckWriteStrP(
+                            param,
+                            backupFileRepoPathP(
+                                file.reference, .manifestName = file.name, .bundleId = file.bundleId, .blockIncr = true));
+                        pckWriteU64P(param, file.bundleOffset + file.sizeRepo - file.blockIncrMapSize);
+                        pckWriteU64P(param, file.blockIncrMapSize);
+                    }
+                    else
+                        pckWriteNullP(param);
+                }
+                else
+                    pckWriteU64P(param, 0);
+
                 pckWriteStrP(param, file.name);
+                pckWriteBinP(param, file.checksumRepoSha1 != NULL ? BUF(file.checksumRepoSha1, HASH_TYPE_SHA1_SIZE) : NULL);
+                pckWriteU64P(param, file.sizeRepo);
                 pckWriteBoolP(param, file.resume);
                 pckWriteBoolP(param, file.reference != NULL);
 
@@ -1814,6 +1863,7 @@ backupProcess(
             .delta = cfgOptionBool(cfgOptDelta),
             .bundle = cfgOptionBool(cfgOptRepoBundle),
             .bundleId = 1,
+            .blockIncr = cfgOptionBool(cfgOptRepoBlock),
 
             // Build expression to identify files that can be copied from the standby when standby backup is supported
             .standbyExp = regExpNew(
@@ -2036,7 +2086,7 @@ backupArchiveCheckCopy(const BackupData *const backupData, Manifest *const manif
 
             // Loop through all the segments in the lsn range
             StringList *walSegmentList = pgLsnRangeToWalSegmentList(
-                manifestData(manifest)->pgVersion, backupData->timeline, lsnStart, lsnStop, backupData->walSegmentSize);
+                backupData->timeline, lsnStart, lsnStop, backupData->walSegmentSize);
 
             for (unsigned int walSegmentIdx = 0; walSegmentIdx < strLstSize(walSegmentList); walSegmentIdx++)
             {
@@ -2097,8 +2147,8 @@ backupArchiveCheckCopy(const BackupData *const backupData, Manifest *const manif
                             storageNewWriteP(
                                 storageRepoWrite(),
                                 backupFileRepoPathP(
-                                    manifestData(manifest)->backupLabel, .manifestName = manifestName,
-                                    .compressType = compressTypeEnum(cfgOptionStrId(cfgOptCompressType)))));
+                                    manifestData(manifest)->backupLabel, manifestName, 0,
+                                    compressTypeEnum(cfgOptionStrId(cfgOptCompressType)), false)));
 
                         // Add to manifest
                         ManifestFile file =
@@ -2110,9 +2160,8 @@ backupArchiveCheckCopy(const BackupData *const backupData, Manifest *const manif
                             .size = backupData->walSegmentSize,
                             .sizeRepo = pckReadU64P(ioFilterGroupResultP(filterGroup, SIZE_FILTER_TYPE)),
                             .timestamp = manifestData(manifest)->backupTimestampStop,
+                            .checksumSha1 = bufPtr(bufNewDecode(encodingHex, strSubN(archiveFile, 25, 40))),
                         };
-
-                        memcpy(file.checksumSha1, strZ(strSubN(archiveFile, 25, 40)), HASH_TYPE_SHA1_SIZE_HEX + 1);
 
                         manifestFileAdd(manifest, &file);
                     }
@@ -2215,7 +2264,7 @@ backupComplete(InfoBackup *const infoBackup, Manifest *const manifest)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 cmdBackup(void)
 {
     FUNCTION_LOG_VOID(logLevelDebug);
@@ -2256,9 +2305,9 @@ cmdBackup(void)
 
         // Build the manifest
         Manifest *manifest = manifestNewBuild(
-            backupData->storagePrimary, infoPg.version, infoPg.catalogVersion, cfgOptionBool(cfgOptOnline),
-            cfgOptionBool(cfgOptChecksumPage), cfgOptionBool(cfgOptRepoBundle), strLstNewVarLst(cfgOptionLst(cfgOptExclude)),
-            backupStartResult.tablespaceList);
+            backupData->storagePrimary, infoPg.version, infoPg.catalogVersion, timestampStart, cfgOptionBool(cfgOptOnline),
+            cfgOptionBool(cfgOptChecksumPage), cfgOptionBool(cfgOptRepoBundle), cfgOptionBool(cfgOptRepoBlock),
+            strLstNewVarLst(cfgOptionLst(cfgOptExclude)), backupStartResult.tablespaceList);
 
         // Validate the manifest using the copy start time
         manifestBuildValidate(
@@ -2303,8 +2352,8 @@ cmdBackup(void)
 
         // Complete manifest
         manifestBuildComplete(
-            manifest, timestampStart, backupStartResult.lsn, backupStartResult.walSegmentName, backupStopResult.timestamp,
-            backupStopResult.lsn, backupStopResult.walSegmentName, infoPg.id, infoPg.systemId, backupStartResult.dbList,
+            manifest, backupStartResult.lsn, backupStartResult.walSegmentName, backupStopResult.timestamp, backupStopResult.lsn,
+            backupStopResult.walSegmentName, infoPg.id, infoPg.systemId, backupStartResult.dbList,
             cfgOptionBool(cfgOptArchiveCheck), cfgOptionBool(cfgOptArchiveCopy), cfgOptionUInt(cfgOptBufferSize),
             cfgOptionUInt(cfgOptCompressLevel), cfgOptionUInt(cfgOptCompressLevelNetwork), cfgOptionBool(cfgOptRepoHardlink),
             cfgOptionUInt(cfgOptProcessMax), cfgOptionBool(cfgOptBackupStandby),

@@ -53,7 +53,7 @@ Macros for function logging
 #define FUNCTION_LOG_STORAGE_WRITE_AZURE_TYPE                                                                                      \
     StorageWriteAzure *
 #define FUNCTION_LOG_STORAGE_WRITE_AZURE_FORMAT(value, buffer, bufferSize)                                                         \
-    objToLog(value, "StorageWriteAzure", buffer, bufferSize)
+    objNameToLog(value, "StorageWriteAzure", buffer, bufferSize)
 
 /***********************************************************************************************************************************
 Open the file
@@ -259,7 +259,7 @@ storageWriteAzureClose(THIS_VOID)
 }
 
 /**********************************************************************************************************************************/
-StorageWrite *
+FN_EXTERN StorageWrite *
 storageWriteAzureNew(StorageAzure *storage, const String *name, uint64_t fileId, size_t blockSize)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
@@ -276,7 +276,7 @@ storageWriteAzureNew(StorageAzure *storage, const String *name, uint64_t fileId,
 
     OBJ_NEW_BEGIN(StorageWriteAzure, .childQty = MEM_CONTEXT_QTY_MAX, .allocQty = MEM_CONTEXT_QTY_MAX)
     {
-        StorageWriteAzure *driver = OBJ_NEW_ALLOC();
+        StorageWriteAzure *const driver = OBJ_NAME(OBJ_NEW_ALLOC(), StorageWrite::StorageWriteAzure);
 
         *driver = (StorageWriteAzure)
         {

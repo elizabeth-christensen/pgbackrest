@@ -5,6 +5,7 @@ Remote Command
 
 #include <string.h>
 
+#include "command/backup/blockIncr.h"
 #include "command/backup/pageChecksum.h"
 #include "command/control/common.h"
 #include "common/crypto/cipherBlock.h"
@@ -35,6 +36,7 @@ Filter handlers
 ***********************************************************************************************************************************/
 static const StorageRemoteFilterHandler storageRemoteFilterHandlerList[] =
 {
+    {.type = BLOCK_INCR_FILTER_TYPE, .handlerParam = blockIncrNewPack},
     {.type = CIPHER_BLOCK_FILTER_TYPE, .handlerParam = cipherBlockNewPack},
     {.type = CRYPTO_HASH_FILTER_TYPE, .handlerParam = cryptoHashNewPack},
     {.type = PAGE_CHECKSUM_FILTER_TYPE, .handlerParam = pageChecksumNewPack},
@@ -43,7 +45,7 @@ static const StorageRemoteFilterHandler storageRemoteFilterHandlerList[] =
 };
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 cmdRemote(ProtocolServer *const server)
 {
     FUNCTION_LOG_VOID(logLevelDebug);

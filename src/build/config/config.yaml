@@ -692,7 +692,6 @@ option:
     section: global
     type: integer
     required: false
-    allow-range: [0, 9]
     command: compress
     command-role:
       async: {}
@@ -1818,6 +1817,22 @@ option:
     inherit: repo-bundle-size
     default: 2MiB
     allow-range: [8KiB, 1PiB]
+
+  repo-block:
+    section: global
+    group: repo
+    type: boolean
+    internal: true
+    default: false
+    command:
+      backup: {}
+    command-role:
+      main: {}
+    depend:
+      option: repo-bundle
+      default: false
+      list:
+        - true
 
   repo-cipher-pass:
     section: global

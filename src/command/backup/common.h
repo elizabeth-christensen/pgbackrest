@@ -15,6 +15,7 @@ Common Functions and Definitions for Backup and Expire Commands
 Backup constants
 ***********************************************************************************************************************************/
 #define BACKUP_PATH_HISTORY                                         "backup.history"
+#define BACKUP_BLOCK_INCR_EXT                                       ".pgbi"
 
 /***********************************************************************************************************************************
 Functions
@@ -25,15 +26,16 @@ typedef struct BackupFileRepoPathParam
     const String *manifestName;                                     // File name in manifest
     uint64_t bundleId;                                              // Is the file bundled?
     CompressType compressType;                                      // Is the file compressed?
+    bool blockIncr;                                                 // Is the file a block incremental?
 } BackupFileRepoPathParam;
 
 #define backupFileRepoPathP(backupLabel, ...)                                                                                          \
     backupFileRepoPath(backupLabel, (BackupFileRepoPathParam){__VA_ARGS__})
 
-String *backupFileRepoPath(const String *backupLabel, BackupFileRepoPathParam param);
+FN_EXTERN String *backupFileRepoPath(const String *backupLabel, BackupFileRepoPathParam param);
 
 // Format a backup label from a type and timestamp with an optional prior label
-String *backupLabelFormat(BackupType type, const String *backupLabelPrior, time_t timestamp);
+FN_EXTERN String *backupLabelFormat(BackupType type, const String *backupLabelPrior, time_t timestamp);
 
 // Returns an anchored regex string for filtering backups based on the type (at least one type is required to be true)
 typedef struct BackupRegExpParam
@@ -47,9 +49,9 @@ typedef struct BackupRegExpParam
 #define backupRegExpP(...)                                                                                                         \
     backupRegExp((BackupRegExpParam){__VA_ARGS__})
 
-String *backupRegExp(BackupRegExpParam param);
+FN_EXTERN String *backupRegExp(BackupRegExpParam param);
 
 // Create a symlink to the specified backup (if symlinks are supported)
-void backupLinkLatest(const String *backupLabel, unsigned int repoIdx);
+FN_EXTERN void backupLinkLatest(const String *backupLabel, unsigned int repoIdx);
 
 #endif

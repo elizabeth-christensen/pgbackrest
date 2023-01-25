@@ -12,6 +12,7 @@ Command and Option Parse
 #include "common/debug.h"
 #include "common/error.h"
 #include "common/ini.h"
+#include "common/io/bufferRead.h"
 #include "common/log.h"
 #include "common/macro.h"
 #include "common/memContext.h"
@@ -366,7 +367,7 @@ cfgParseCommandId(const char *const commandName)
 }
 
 /**********************************************************************************************************************************/
-const char *
+FN_EXTERN const char *
 cfgParseCommandName(const ConfigCommand commandId)
 {
     FUNCTION_TEST_BEGIN();
@@ -404,7 +405,7 @@ cfgParseCommandRoleEnum(const String *const commandRole)
     THROW_FMT(CommandInvalidError, "invalid command role '%s'", strZ(commandRole));
 }
 
-const String *
+FN_EXTERN const String *
 cfgParseCommandRoleStr(const ConfigCommandRole commandRole)
 {
     FUNCTION_TEST_BEGIN();
@@ -435,7 +436,7 @@ cfgParseCommandRoleStr(const ConfigCommandRole commandRole)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 cfgParseCommandRoleName(const ConfigCommand commandId, const ConfigCommandRole commandRoleId)
 {
     FUNCTION_TEST_BEGIN();
@@ -458,7 +459,7 @@ Find an option by name in the option list
 #define OPTION_PREFIX_RESET                                         "reset-"
 #define OPTION_NAME_SIZE_MAX                                        64
 
-CfgParseOptionResult
+FN_EXTERN CfgParseOptionResult
 cfgParseOption(const String *const optionCandidate, const CfgParseOptionParam param)
 {
     FUNCTION_TEST_BEGIN();
@@ -687,7 +688,7 @@ cfgParseOption(const String *const optionCandidate, const CfgParseOptionParam pa
 }
 
 /**********************************************************************************************************************************/
-ConfigOptionDataType
+FN_EXTERN ConfigOptionDataType
 cfgParseOptionDataType(const ConfigOption optionId)
 {
     FUNCTION_TEST_BEGIN();
@@ -765,6 +766,8 @@ cfgParseOptionalRule(
         FUNCTION_TEST_PARAM(ENUM, optionId);
     FUNCTION_TEST_END();
 
+    FUNCTION_AUDIT_HELPER();
+
     ASSERT(optionalRuleType != 0);
     ASSERT(commandId < CFG_COMMAND_TOTAL);
     ASSERT(optionId < CFG_OPTION_TOTAL);
@@ -777,10 +780,10 @@ cfgParseOptionalRule(
         // Initialize optional rules
         if (optionalRules->pack == NULL)
         {
-            PackRead *const groupList = pckReadNewC(parseRuleOption[optionId].pack, parseRuleOption[optionId].packSize);
-
             MEM_CONTEXT_TEMP_BEGIN()
             {
+                PackRead *const groupList = pckReadNewC(parseRuleOption[optionId].pack, parseRuleOption[optionId].packSize);
+
                 // Seach for a matching group
                 do
                 {
@@ -1047,7 +1050,7 @@ cfgParseOptionalFilterDepend(PackRead *const filter, const Config *const config,
 }
 
 /**********************************************************************************************************************************/
-const String *
+FN_EXTERN const String *
 cfgParseOptionDefault(ConfigCommand commandId, ConfigOption optionId)
 {
     FUNCTION_TEST_BEGIN();
@@ -1073,7 +1076,7 @@ cfgParseOptionDefault(ConfigCommand commandId, ConfigOption optionId)
 }
 
 /**********************************************************************************************************************************/
-const char *
+FN_EXTERN const char *
 cfgParseOptionName(ConfigOption optionId)
 {
     FUNCTION_TEST_BEGIN();
@@ -1086,7 +1089,7 @@ cfgParseOptionName(ConfigOption optionId)
 }
 
 /**********************************************************************************************************************************/
-const char *
+FN_EXTERN const char *
 cfgParseOptionKeyIdxName(ConfigOption optionId, unsigned int keyIdx)
 {
     FUNCTION_TEST_BEGIN();
@@ -1100,11 +1103,11 @@ cfgParseOptionKeyIdxName(ConfigOption optionId, unsigned int keyIdx)
     // If the option is in a group then construct the name
     if (parseRuleOption[optionId].group)
     {
-        String *name = strNewFmt(
-            "%s%u%s", parseRuleOptionGroup[parseRuleOption[optionId].groupId].name, keyIdx + 1,
-            parseRuleOption[optionId].name + strlen(parseRuleOptionGroup[parseRuleOption[optionId].groupId].name));
-
-        FUNCTION_TEST_RETURN_CONST(STRINGZ, strZ(name));
+        FUNCTION_TEST_RETURN_CONST(
+            STRINGZ,
+            zNewFmt(
+                "%s%u%s", parseRuleOptionGroup[parseRuleOption[optionId].groupId].name, keyIdx + 1,
+                parseRuleOption[optionId].name + strlen(parseRuleOptionGroup[parseRuleOption[optionId].groupId].name)));
     }
 
     // Else return the stored name
@@ -1112,7 +1115,7 @@ cfgParseOptionKeyIdxName(ConfigOption optionId, unsigned int keyIdx)
 }
 
 /**********************************************************************************************************************************/
-bool
+FN_EXTERN bool
 cfgParseOptionRequired(ConfigCommand commandId, ConfigOption optionId)
 {
     FUNCTION_TEST_BEGIN();
@@ -1145,7 +1148,7 @@ cfgParseOptionRequired(ConfigCommand commandId, ConfigOption optionId)
 }
 
 /**********************************************************************************************************************************/
-bool
+FN_EXTERN bool
 cfgParseOptionSecure(ConfigOption optionId)
 {
     FUNCTION_TEST_BEGIN();
@@ -1158,7 +1161,7 @@ cfgParseOptionSecure(ConfigOption optionId)
 }
 
 /**********************************************************************************************************************************/
-ConfigOptionType
+FN_EXTERN ConfigOptionType
 cfgParseOptionType(ConfigOption optionId)
 {
     FUNCTION_TEST_BEGIN();
@@ -1171,7 +1174,7 @@ cfgParseOptionType(ConfigOption optionId)
 }
 
 /**********************************************************************************************************************************/
-bool
+FN_EXTERN bool
 cfgParseOptionValid(ConfigCommand commandId, ConfigCommandRole commandRoleId, ConfigOption optionId)
 {
     FUNCTION_TEST_BEGIN();
@@ -1222,25 +1225,26 @@ cfgFileLoadPart(String **config, const Buffer *configPart)
         FUNCTION_LOG_PARAM(BUFFER, configPart);
     FUNCTION_LOG_END();
 
+    FUNCTION_AUDIT_HELPER();
+
     if (configPart != NULL)
     {
-        String *configPartStr = strNewBuf(configPart);
-
         // Validate the file by parsing it as an Ini object. If the file is not properly formed, an error will occur.
-        if (strSize(configPartStr) > 0)
+        if (bufUsed(configPart) > 0)
         {
-            Ini *configPartIni = iniNew();
-            iniParse(configPartIni, configPartStr);
+            iniValid(iniNewP(ioBufferReadNew(configPart)));
 
             // Create the result config file
             if (*config == NULL)
+            {
                 *config = strNew();
+            }
             // Else add an LF in case the previous file did not end with one
             else
+                strCat(*config, LF_STR);
 
             // Add the config part to the result config file
-            strCat(*config, LF_STR);
-            strCat(*config, configPartStr);
+            strCat(*config, strNewBuf(configPart));
         }
     }
 
@@ -1262,6 +1266,8 @@ cfgFileLoad(                                                        // NOTE: Pas
         FUNCTION_LOG_PARAM(STRING, optConfigIncludePathDefault);
         FUNCTION_LOG_PARAM(STRING, origConfigDefault);
     FUNCTION_LOG_END();
+
+    FUNCTION_AUDIT_HELPER();
 
     ASSERT(optionList != NULL);
     ASSERT(optConfigDefault != NULL);
@@ -1339,12 +1345,9 @@ cfgFileLoad(                                                        // NOTE: Pas
     // Load *.conf files from the include directory
     if (loadConfigInclude)
     {
+        // Validate the file by parsing it as an Ini object. If the file is not properly formed, an error will occur.
         if (result != NULL)
-        {
-            // Validate the file by parsing it as an Ini object. If the file is not properly formed, an error will occur.
-            Ini *ini = iniNew();
-            iniParse(ini, result);
-        }
+            iniValid(iniNewP(ioBufferReadNew(BUFSTR(result))));
 
         const String *configIncludePath = NULL;
 
@@ -1384,7 +1387,7 @@ cfgFileLoad(                                                        // NOTE: Pas
 ??? Add validation of section names and check all sections for invalid options in the check command.  It's too expensive to add the
 logic to this critical path code.
 ***********************************************************************************************************************************/
-void
+FN_EXTERN void
 configParse(const Storage *storage, unsigned int argListSize, const char *argList[], bool resetLogLevel)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
@@ -1753,8 +1756,8 @@ configParse(const Storage *storage, unsigned int argListSize, const char *argLis
 
             if (configString != NULL)
             {
-                Ini *ini = iniNew();
-                iniParse(ini, configString);
+                const Ini *const ini = iniNewP(ioBufferReadNew(BUFSTR(configString)), .store = true);
+
                 // Get the stanza name
                 String *stanza = NULL;
 
@@ -2075,9 +2078,15 @@ configParse(const Storage *storage, unsigned int argListSize, const char *argLis
                         if (!dependResult.valid && optionSet && parseOptionValue->source == cfgSourceParam)
                         {
                             PackRead *filter = pckReadNewC(optionalRules.valid, optionalRules.validSize);
-                            ConfigOption dependId = pckReadU32P(filter);
 
-                            // Get depend option name
+                            // If there is a boolean default value just consume it since it is not needed here
+                            pckReadNext(filter);
+
+                            if (pckReadType(filter) == pckTypeBool)
+                                pckReadBoolP(filter);
+
+                            // Get depend option id and name
+                            ConfigOption dependId = pckReadU32P(filter);
                             const String *dependOptionName = STR(cfgParseOptionKeyIdxName(dependId, optionKeyIdx));
 
                             // If depend value is not set

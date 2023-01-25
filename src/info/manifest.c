@@ -27,6 +27,9 @@ STRING_EXTERN(BACKUP_MANIFEST_FILE_STR,                             BACKUP_MANIF
 STRING_EXTERN(MANIFEST_TARGET_PGDATA_STR,                           MANIFEST_TARGET_PGDATA);
 STRING_EXTERN(MANIFEST_TARGET_PGTBLSPC_STR,                         MANIFEST_TARGET_PGTBLSPC);
 
+// All block incremental sizes must be divisible by this factor
+#define BLOCK_INCR_SIZE_FACTOR                                      8192
+
 /***********************************************************************************************************************************
 Object type
 ***********************************************************************************************************************************/
@@ -94,8 +97,11 @@ static time_t manifestPackBaseTime = -1;
 // Flags used to reduce the size of packed data. They should be ordered from most to least likely and can be reordered at will.
 typedef enum
 {
+    manifestFilePackFlagChecksum,
+    manifestFilePackFlagChecksumRepo,
     manifestFilePackFlagReference,
     manifestFilePackFlagBundle,
+    manifestFilePackFlagBlockIncr,
     manifestFilePackFlagCopy,
     manifestFilePackFlagDelta,
     manifestFilePackFlagResume,
@@ -127,6 +133,12 @@ manifestFilePack(const Manifest *const manifest, const ManifestFile *const file)
     // Flags
     uint64_t flag = 0;
 
+    if (file->checksumSha1 != NULL)
+        flag |= 1 << manifestFilePackFlagChecksum;
+
+    if (file->checksumRepoSha1 != NULL)
+        flag |= 1 << manifestFilePackFlagChecksumRepo;
+
     if (file->copy)
         flag |= 1 << manifestFilePackFlagCopy;
 
@@ -150,6 +162,9 @@ manifestFilePack(const Manifest *const manifest, const ManifestFile *const file)
 
     if (file->bundleId != 0)
         flag |= 1 << manifestFilePackFlagBundle;
+
+    if (file->blockIncrSize != 0)
+        flag |= 1 << manifestFilePackFlagBlockIncr;
 
     if (file->mode != manifest->fileModeDefault)
         flag |= 1 << manifestFilePackFlagMode;
@@ -178,8 +193,18 @@ manifestFilePack(const Manifest *const manifest, const ManifestFile *const file)
     cvtUInt64ToVarInt128(cvtInt64ToZigZag(manifestPackBaseTime - file->timestamp), buffer, &bufferPos, sizeof(buffer));
 
     // SHA1 checksum
-    strcpy((char *)buffer + bufferPos, file->checksumSha1);
-    bufferPos += HASH_TYPE_SHA1_SIZE_HEX + 1;
+    if (file->checksumSha1 != NULL)
+    {
+        memcpy((uint8_t *)buffer + bufferPos, file->checksumSha1, HASH_TYPE_SHA1_SIZE);
+        bufferPos += HASH_TYPE_SHA1_SIZE;
+    }
+
+    // SHA1 repo checksum
+    if (file->checksumRepoSha1 != NULL)
+    {
+        memcpy((uint8_t *)buffer + bufferPos, file->checksumRepoSha1, HASH_TYPE_SHA1_SIZE);
+        bufferPos += HASH_TYPE_SHA1_SIZE;
+    }
 
     // Reference
     if (file->reference != NULL)
@@ -207,6 +232,15 @@ manifestFilePack(const Manifest *const manifest, const ManifestFile *const file)
     {
         cvtUInt64ToVarInt128(file->bundleId, buffer, &bufferPos, sizeof(buffer));
         cvtUInt64ToVarInt128(file->bundleOffset, buffer, &bufferPos, sizeof(buffer));
+    }
+
+    // Block incremental
+    if (flag & (1 << manifestFilePackFlagBlockIncr))
+    {
+        ASSERT(file->blockIncrSize % BLOCK_INCR_SIZE_FACTOR == 0);
+
+        cvtUInt64ToVarInt128(file->blockIncrSize / BLOCK_INCR_SIZE_FACTOR, buffer, &bufferPos, sizeof(buffer));
+        cvtUInt64ToVarInt128(file->blockIncrMapSize, buffer, &bufferPos, sizeof(buffer));
     }
 
     // Allocate memory for the file pack
@@ -241,7 +275,7 @@ manifestFilePack(const Manifest *const manifest, const ManifestFile *const file)
     FUNCTION_TEST_RETURN_TYPE_P(ManifestFilePack, (ManifestFilePack *)result);
 }
 
-ManifestFile
+FN_EXTERN ManifestFile
 manifestFileUnpack(const Manifest *const manifest, const ManifestFilePack *const filePack)
 {
     FUNCTION_TEST_BEGIN();
@@ -277,8 +311,18 @@ manifestFileUnpack(const Manifest *const manifest, const ManifestFilePack *const
     result.checksumPage = (flag >> manifestFilePackFlagChecksumPage) & 1;
 
     // SHA1 checksum
-    memcpy(result.checksumSha1, (const uint8_t *)filePack + bufferPos, HASH_TYPE_SHA1_SIZE_HEX + 1);
-    bufferPos += HASH_TYPE_SHA1_SIZE_HEX + 1;
+    if (flag & (1 << manifestFilePackFlagChecksum))
+    {
+        result.checksumSha1 = (const uint8_t *)filePack + bufferPos;
+        bufferPos += HASH_TYPE_SHA1_SIZE;
+    }
+
+    // SHA1 repo checksum
+    if (flag & (1 << manifestFilePackFlagChecksumRepo))
+    {
+        result.checksumRepoSha1 = (const uint8_t *)filePack + bufferPos;
+        bufferPos += HASH_TYPE_SHA1_SIZE;
+    }
 
     // Reference
     if (flag & (1 << manifestFilePackFlagReference))
@@ -314,6 +358,13 @@ manifestFileUnpack(const Manifest *const manifest, const ManifestFilePack *const
         result.bundleOffset = cvtUInt64FromVarInt128((const uint8_t *)filePack, &bufferPos, UINT_MAX);
     }
 
+    // Block incremental
+    if (flag & (1 << manifestFilePackFlagBlockIncr))
+    {
+        result.blockIncrSize = cvtUInt64FromVarInt128((const uint8_t *)filePack, &bufferPos, UINT_MAX) * BLOCK_INCR_SIZE_FACTOR;
+        result.blockIncrMapSize = cvtUInt64FromVarInt128((const uint8_t *)filePack, &bufferPos, UINT_MAX);
+    }
+
     // Checksum page error
     result.checksumPageError = flag & (1 << manifestFilePackFlagChecksumPageError) ? true : false;
 
@@ -323,7 +374,7 @@ manifestFileUnpack(const Manifest *const manifest, const ManifestFilePack *const
     FUNCTION_TEST_RETURN_TYPE(ManifestFile, result);
 }
 
-void
+FN_EXTERN void
 manifestFileAdd(Manifest *const this, ManifestFile *const file)
 {
     FUNCTION_TEST_BEGIN();
@@ -372,7 +423,7 @@ manifestFilePackUpdate(Manifest *const this, ManifestFilePack **const filePack, 
     FUNCTION_TEST_RETURN_VOID();
 }
 
-void
+FN_EXTERN void
 manifestLinkAdd(Manifest *this, const ManifestLink *link)
 {
     FUNCTION_TEST_BEGIN();
@@ -431,7 +482,7 @@ manifestPathAdd(Manifest *this, const ManifestPath *path)
     FUNCTION_TEST_RETURN_VOID();
 }
 
-void
+FN_EXTERN void
 manifestTargetAdd(Manifest *this, const ManifestTarget *target)
 {
     FUNCTION_TEST_BEGIN();
@@ -470,6 +521,8 @@ static Manifest *
 manifestNewInternal(void)
 {
     FUNCTION_TEST_VOID();
+
+    FUNCTION_AUDIT_HELPER();
 
     Manifest *this = OBJ_NEW_ALLOC();
 
@@ -518,6 +571,7 @@ static ManifestLinkCheck
 manifestLinkCheckInit(void)
 {
     FUNCTION_TEST_VOID();
+    FUNCTION_AUDIT_STRUCT();
     FUNCTION_TEST_RETURN_TYPE(
         ManifestLinkCheck, (ManifestLinkCheck){.linkList = lstNewP(sizeof(ManifestLinkCheckItem), .comparator = lstComparatorStr)});
 }
@@ -673,7 +727,7 @@ manifestLinkCheckOne(const Manifest *this, ManifestLinkCheck *linkCheck, unsigne
     FUNCTION_LOG_RETURN_VOID();
 }
 
-void
+FN_EXTERN void
 manifestLinkCheck(const Manifest *this)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -693,6 +747,80 @@ manifestLinkCheck(const Manifest *this)
     MEM_CONTEXT_TEMP_END();
 
     FUNCTION_LOG_RETURN_VOID();
+}
+
+/***********************************************************************************************************************************
+Calculate block incremental size for a file. The block size is based on the size and age of the file. Larger files get larger block
+sizes to reduce the cost of the map and individual block compression. Older files also get larger block sizes under the assumption
+that they are unlikely to be modified if they have not been modified in a while. Very old and very small files skip block
+incremental entirely.
+
+The minimum practical block size is 128k. After that, the loss of compression efficiency becomes too expensive in terms of space.
+***********************************************************************************************************************************/
+// File size to block size map
+static struct ManifestBuildBlockIncrSizeMap
+{
+    uint32_t fileSize;
+    uint32_t blockSize;
+} manifestBuildBlockIncrSizeMap[] =
+{
+    {.fileSize = 1024 * 1024 * 1024, .blockSize = 1024 * 1024},
+    {.fileSize =  256 * 1024 * 1024, .blockSize =  768 * 1024},
+    {.fileSize =   64 * 1024 * 1024, .blockSize =  512 * 1024},
+    {.fileSize =   16 * 1024 * 1024, .blockSize =  384 * 1024},
+    {.fileSize =    4 * 1024 * 1024, .blockSize =  256 * 1024},
+    {.fileSize =    2 * 1024 * 1024, .blockSize =  192 * 1024},
+    {.fileSize =         128 * 1024, .blockSize =  128 * 1024},
+};
+
+// File age to block multiplier map
+static struct ManifestBuildBlockIncrTimeMap
+{
+    uint32_t fileAge;
+    uint32_t blockMultiplier;
+} manifestBuildBlockIncrTimeMap[] =
+{
+    {.fileAge = 4 * 7 * 86400, .blockMultiplier = 0},
+    {.fileAge = 2 * 7 * 86400, .blockMultiplier = 4},
+    {.fileAge =     7 * 86400, .blockMultiplier = 2},
+};
+
+static uint64_t
+manifestBuildBlockIncrSize(const time_t timeStart, const ManifestFile *const file)
+{
+    FUNCTION_TEST_BEGIN();
+        FUNCTION_TEST_PARAM(TIME, timeStart);
+        FUNCTION_TEST_PARAM(MANIFEST_FILE, file);
+    FUNCTION_TEST_END();
+
+    uint64_t result = 0;
+
+    // Search size map for the appropriate block size
+    for (unsigned int sizeIdx = 0; sizeIdx < LENGTH_OF(manifestBuildBlockIncrSizeMap); sizeIdx++)
+    {
+        if (file->size >= manifestBuildBlockIncrSizeMap[sizeIdx].fileSize)
+        {
+            result = manifestBuildBlockIncrSizeMap[sizeIdx].blockSize;
+            break;
+        }
+    }
+
+    // If block size > 0 then search age map for a multiplier
+    if (result != 0)
+    {
+        const time_t fileAge = timeStart - file->timestamp;
+
+        for (unsigned int timeIdx = 0; timeIdx < LENGTH_OF(manifestBuildBlockIncrTimeMap); timeIdx++)
+        {
+            if (fileAge >= (time_t)manifestBuildBlockIncrTimeMap[timeIdx].fileAge)
+            {
+                result *= manifestBuildBlockIncrTimeMap[timeIdx].blockMultiplier;
+                break;
+            }
+        }
+    }
+
+    FUNCTION_TEST_RETURN(UINT64, result);
 }
 
 /**********************************************************************************************************************************/
@@ -725,6 +853,8 @@ manifestBuildInfo(
         FUNCTION_TEST_PARAM(BOOL, dbPath);
         FUNCTION_TEST_PARAM(STORAGE_INFO, *info);
     FUNCTION_TEST_END();
+
+    FUNCTION_AUDIT_HELPER();
 
     ASSERT(buildData != NULL);
     ASSERT(manifestParentName != NULL);
@@ -804,11 +934,11 @@ manifestBuildInfo(
                     FUNCTION_TEST_RETURN_VOID();
 
                 // Skip pg_serial/* since these files are reset
-                if (strEqZ(info->name, PG_PATH_PGSERIAL) && pgVersion >= PG_VERSION_91)
+                if (strEqZ(info->name, PG_PATH_PGSERIAL))
                     FUNCTION_TEST_RETURN_VOID();
 
                 // Skip pg_snapshots/* since these files cannot be reused on recovery
-                if (strEqZ(info->name, PG_PATH_PGSNAPSHOTS) && pgVersion >= PG_VERSION_92)
+                if (strEqZ(info->name, PG_PATH_PGSNAPSHOTS))
                     FUNCTION_TEST_RETURN_VOID();
 
                 // Skip temporary statistics in pg_stat_tmp even when stats_temp_directory is set because PGSS_TEXT_FILE is always
@@ -926,8 +1056,12 @@ manifestBuildInfo(
             if (info->size == 0 && buildData->manifest->pub.data.bundle)
             {
                 file.copy = false;
-                memcpy(file.checksumSha1, HASH_TYPE_SHA1_ZERO, HASH_TYPE_SHA1_SIZE_HEX + 1);
+                file.checksumSha1 = bufPtrConst(HASH_TYPE_SHA1_ZERO_BUF);
             }
+
+            // Get block incremental size
+            if (info->size != 0 && buildData->manifest->pub.data.blockIncr)
+                file.blockIncrSize = manifestBuildBlockIncrSize(buildData->manifest->pub.data.backupTimestampStart, &file);
 
             // Determine if this file should be page checksummed
             if (dbPath && buildData->checksumPage)
@@ -1123,25 +1257,27 @@ manifestBuildInfo(
 #define DB_PATH_EXP                                                                                                                \
     "(" MANIFEST_TARGET_PGDATA "/(" PG_PATH_GLOBAL "|" PG_PATH_BASE "/[0-9]+)|" MANIFEST_TARGET_PGTBLSPC "/[0-9]+/%s/[0-9]+)"
 
-Manifest *
+FN_EXTERN Manifest *
 manifestNewBuild(
-    const Storage *const storagePg, const unsigned int pgVersion, const unsigned int pgCatalogVersion, const bool online,
-    const bool checksumPage, const bool bundle, const StringList *const excludeList, const Pack *const tablespaceList)
+    const Storage *const storagePg, const unsigned int pgVersion, const unsigned int pgCatalogVersion, const time_t timestampStart,
+    const bool online, const bool checksumPage, const bool bundle, const bool blockIncr, const StringList *const excludeList,
+    const Pack *const tablespaceList)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
         FUNCTION_LOG_PARAM(STORAGE, storagePg);
         FUNCTION_LOG_PARAM(UINT, pgVersion);
         FUNCTION_LOG_PARAM(UINT, pgCatalogVersion);
+        FUNCTION_LOG_PARAM(TIME, timestampStart);
         FUNCTION_LOG_PARAM(BOOL, online);
         FUNCTION_LOG_PARAM(BOOL, checksumPage);
         FUNCTION_LOG_PARAM(BOOL, bundle);
+        FUNCTION_LOG_PARAM(BOOL, blockIncr);
         FUNCTION_LOG_PARAM(STRING_LIST, excludeList);
         FUNCTION_LOG_PARAM(PACK, tablespaceList);
     FUNCTION_LOG_END();
 
     ASSERT(storagePg != NULL);
     ASSERT(pgVersion != 0);
-    ASSERT(!checksumPage || pgVersion >= PG_VERSION_93);
 
     Manifest *this = NULL;
 
@@ -1152,10 +1288,12 @@ manifestNewBuild(
         this->pub.data.backrestVersion = strNewZ(PROJECT_VERSION);
         this->pub.data.pgVersion = pgVersion;
         this->pub.data.pgCatalogVersion = pgCatalogVersion;
+        this->pub.data.backupTimestampStart = timestampStart;
         this->pub.data.backupType = backupTypeFull;
         this->pub.data.backupOptionOnline = online;
         this->pub.data.backupOptionChecksumPage = varNewBool(checksumPage);
         this->pub.data.bundle = bundle;
+        this->pub.data.blockIncr = blockIncr;
 
         MEM_CONTEXT_TEMP_BEGIN()
         {
@@ -1272,75 +1410,72 @@ manifestNewBuild(
             // to check for _init files which will sort after the vast majority of the relation files.  We could check storage for
             // each _init file but that would be expensive.
             // -------------------------------------------------------------------------------------------------------------------------
-            if (pgVersion >= PG_VERSION_91)
-            {
-                RegExp *relationExp = regExpNew(strNewFmt("^" DB_PATH_EXP "/" RELATION_EXP "$", strZ(buildData.tablespaceId)));
-                unsigned int fileIdx = 0;
-                char lastRelationFileId[21] = "";                   // Large enough for a 64-bit unsigned integer
-                bool lastRelationFileIdUnlogged = false;
+            RegExp *relationExp = regExpNew(strNewFmt("^" DB_PATH_EXP "/" RELATION_EXP "$", strZ(buildData.tablespaceId)));
+            unsigned int fileIdx = 0;
+            char lastRelationFileId[21] = "";                   // Large enough for a 64-bit unsigned integer
+            bool lastRelationFileIdUnlogged = false;
 
 #ifdef DEBUG_MEM
-                // Record the temp context size before the loop begins
-                size_t sizeBegin = memContextSize(memContextCurrent());
+            // Record the temp context size before the loop begins
+            size_t sizeBegin = memContextSize(memContextCurrent());
 #endif
 
-                while (fileIdx < manifestFileTotal(this))
+            while (fileIdx < manifestFileTotal(this))
+            {
+                // If this file looks like a relation.  Note that this never matches on _init forks.
+                const String *const filePathName = manifestFileNameGet(this, fileIdx);
+
+                if (regExpMatch(relationExp, filePathName))
                 {
-                    // If this file looks like a relation.  Note that this never matches on _init forks.
-                    const String *const filePathName = manifestFileNameGet(this, fileIdx);
+                    // Get the filename (without path)
+                    const char *fileName = strBaseZ(filePathName);
+                    size_t fileNameSize = strlen(fileName);
 
-                    if (regExpMatch(relationExp, filePathName))
+                    // Strip off the numeric part of the relation
+                    char relationFileId[sizeof(lastRelationFileId)];
+                    unsigned int nameIdx = 0;
+
+                    for (; nameIdx < fileNameSize; nameIdx++)
                     {
-                        // Get the filename (without path)
-                        const char *fileName = strBaseZ(filePathName);
-                        size_t fileNameSize = strlen(fileName);
+                        if (!isdigit(fileName[nameIdx]))
+                            break;
 
-                        // Strip off the numeric part of the relation
-                        char relationFileId[sizeof(lastRelationFileId)];
-                        unsigned int nameIdx = 0;
-
-                        for (; nameIdx < fileNameSize; nameIdx++)
-                        {
-                            if (!isdigit(fileName[nameIdx]))
-                                break;
-
-                            relationFileId[nameIdx] = fileName[nameIdx];
-                        }
-
-                        relationFileId[nameIdx] = '\0';
-
-                        // The filename must have characters
-                        ASSERT(relationFileId[0] != '\0');
-
-                        // Store the last relation so it does not need to be found everytime
-                        if (strcmp(lastRelationFileId, relationFileId) != 0)
-                        {
-                            // Determine if the relation is unlogged
-                            String *relationInit = strNewFmt(
-                                "%.*s%s_init", (int)(strSize(filePathName) - fileNameSize), strZ(filePathName), relationFileId);
-                            lastRelationFileIdUnlogged = manifestFileExists(this, relationInit);
-                            strFree(relationInit);
-
-                            // Save the file id so we don't need to do the lookup next time if it doesn't change
-                            strcpy(lastRelationFileId, relationFileId);
-                        }
-
-                        // If relation is unlogged then remove it
-                        if (lastRelationFileIdUnlogged)
-                        {
-                            manifestFileRemove(this, filePathName);
-                            continue;
-                        }
+                        relationFileId[nameIdx] = fileName[nameIdx];
                     }
 
-                    fileIdx++;
+                    relationFileId[nameIdx] = '\0';
+
+                    // The filename must have characters
+                    ASSERT(relationFileId[0] != '\0');
+
+                    // Store the last relation so it does not need to be found everytime
+                    if (strcmp(lastRelationFileId, relationFileId) != 0)
+                    {
+                        // Determine if the relation is unlogged
+                        String *relationInit = strNewFmt(
+                            "%.*s%s_init", (int)(strSize(filePathName) - fileNameSize), strZ(filePathName), relationFileId);
+                        lastRelationFileIdUnlogged = manifestFileExists(this, relationInit);
+                        strFree(relationInit);
+
+                        // Save the file id so we don't need to do the lookup next time if it doesn't change
+                        strcpy(lastRelationFileId, relationFileId);
+                    }
+
+                    // If relation is unlogged then remove it
+                    if (lastRelationFileIdUnlogged)
+                    {
+                        manifestFileRemove(this, filePathName);
+                        continue;
+                    }
                 }
 
-#ifdef DEBUG_MEM
-                // Make sure that the temp context did not grow too much during the loop
-                ASSERT(memContextSize(memContextCurrent()) - sizeBegin < 256);
-#endif
+                fileIdx++;
             }
+
+#ifdef DEBUG_MEM
+            // Make sure that the temp context did not grow too much during the loop
+            ASSERT(memContextSize(memContextCurrent()) - sizeBegin < 256);
+#endif
         }
         MEM_CONTEXT_TEMP_END();
     }
@@ -1350,7 +1485,7 @@ manifestNewBuild(
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 manifestBuildValidate(Manifest *this, bool delta, time_t copyStart, CompressType compressType)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -1407,7 +1542,7 @@ manifestBuildValidate(Manifest *this, bool delta, time_t copyStart, CompressType
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 manifestBuildIncr(Manifest *this, const Manifest *manifestPrior, BackupType type, const String *archiveStart)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -1513,16 +1648,28 @@ manifestBuildIncr(Manifest *this, const Manifest *manifestPrior, BackupType type
             {
                 const ManifestFile filePrior = manifestFileFind(manifestPrior, file.name);
 
-                if (file.copy && file.size == filePrior.size && (delta || file.size == 0 || file.timestamp == filePrior.timestamp))
+                if (file.copy &&
+                    ((filePrior.blockIncrMapSize > 0 && file.blockIncrSize > 0) ||
+                     (file.size == filePrior.size && (delta || file.size == 0 || file.timestamp == filePrior.timestamp))))
                 {
                     file.sizeRepo = filePrior.sizeRepo;
-                    memcpy(file.checksumSha1, filePrior.checksumSha1, HASH_TYPE_SHA1_SIZE_HEX + 1);
+                    file.checksumSha1 = filePrior.checksumSha1;
+                    file.checksumRepoSha1 = filePrior.checksumRepoSha1;
                     file.reference = filePrior.reference != NULL ? filePrior.reference : manifestPrior->pub.data.backupLabel;
                     file.checksumPage = filePrior.checksumPage;
                     file.checksumPageError = filePrior.checksumPageError;
                     file.checksumPageErrorList = filePrior.checksumPageErrorList;
                     file.bundleId = filePrior.bundleId;
                     file.bundleOffset = filePrior.bundleOffset;
+
+                    // Copy block incr info if the file has a block incr size. It is possible for a file to shrink below the limit
+                    // for block incr and lose the block incr map or block incr could be disabled. The block incr size needs to be
+                    // copied from the prior file because it cannot change within a backup set without invalidating all prior maps.
+                    if (file.blockIncrSize > 0)
+                    {
+                        file.blockIncrSize = filePrior.blockIncrSize;
+                        file.blockIncrMapSize = filePrior.blockIncrMapSize;
+                    }
 
                     // Perform delta if the file size is not zero
                     file.delta = delta && file.size != 0;
@@ -1541,17 +1688,16 @@ manifestBuildIncr(Manifest *this, const Manifest *manifestPrior, BackupType type
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 manifestBuildComplete(
-    Manifest *const this, const time_t timestampStart, const String *const lsnStart, const String *const archiveStart,
-    const time_t timestampStop, const String *const lsnStop, const String *const archiveStop, const unsigned int pgId,
-    const uint64_t pgSystemId, const Pack *const dbList, const bool optionArchiveCheck, const bool optionArchiveCopy,
-    const size_t optionBufferSize, const unsigned int optionCompressLevel, const unsigned int optionCompressLevelNetwork,
-    const bool optionHardLink, const unsigned int optionProcessMax, const bool optionStandby, const KeyValue *const annotation)
+    Manifest *const this, const String *const lsnStart, const String *const archiveStart, const time_t timestampStop,
+    const String *const lsnStop, const String *const archiveStop, const unsigned int pgId, const uint64_t pgSystemId,
+    const Pack *const dbList, const bool optionArchiveCheck, const bool optionArchiveCopy, const size_t optionBufferSize,
+    const unsigned int optionCompressLevel, const unsigned int optionCompressLevelNetwork, const bool optionHardLink,
+    const unsigned int optionProcessMax, const bool optionStandby, const KeyValue *const annotation)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
         FUNCTION_LOG_PARAM(MANIFEST, this);
-        FUNCTION_LOG_PARAM(TIME, timestampStart);
         FUNCTION_LOG_PARAM(STRING, lsnStart);
         FUNCTION_LOG_PARAM(STRING, archiveStart);
         FUNCTION_LOG_PARAM(TIME, timestampStop);
@@ -1574,7 +1720,6 @@ manifestBuildComplete(
     MEM_CONTEXT_BEGIN(this->pub.memContext)
     {
         // Save info
-        this->pub.data.backupTimestampStart = timestampStart;
         this->pub.data.lsnStart = strDup(lsnStart);
         this->pub.data.archiveStart = strDup(archiveStart);
         this->pub.data.backupTimestampStop = timestampStop;
@@ -1665,6 +1810,7 @@ manifestBuildComplete(
 #define MANIFEST_KEY_ANNOTATION                                     "annotation"
 #define MANIFEST_KEY_BACKUP_ARCHIVE_START                           "backup-archive-start"
 #define MANIFEST_KEY_BACKUP_ARCHIVE_STOP                            "backup-archive-stop"
+#define MANIFEST_KEY_BACKUP_BLOCK_INCR                              "backup-block-incr"
 #define MANIFEST_KEY_BACKUP_BUNDLE                                  "backup-bundle"
 #define MANIFEST_KEY_BACKUP_LABEL                                   "backup-label"
 #define MANIFEST_KEY_BACKUP_LSN_START                               "backup-lsn-start"
@@ -1675,9 +1821,12 @@ manifestBuildComplete(
 #define MANIFEST_KEY_BACKUP_TIMESTAMP_START                         "backup-timestamp-start"
 #define MANIFEST_KEY_BACKUP_TIMESTAMP_STOP                          "backup-timestamp-stop"
 #define MANIFEST_KEY_BACKUP_TYPE                                    "backup-type"
+#define MANIFEST_KEY_BLOCK_INCR_SIZE                                STRID5("bis", 0x4d220)
+#define MANIFEST_KEY_BLOCK_INCR_MAP_SIZE                            STRID5("bims", 0x9b5220)
 #define MANIFEST_KEY_BUNDLE_ID                                      STRID5("bni", 0x25c20)
 #define MANIFEST_KEY_BUNDLE_OFFSET                                  STRID5("bno", 0x3dc20)
 #define MANIFEST_KEY_CHECKSUM                                       STRID5("checksum", 0x6d66b195030)
+#define MANIFEST_KEY_CHECKSUM_REPO                                  STRID5("rck", 0x2c720)
 #define MANIFEST_KEY_CHECKSUM_PAGE                                  "checksum-page"
 #define MANIFEST_KEY_CHECKSUM_PAGE_ERROR                            "checksum-page-error"
 #define MANIFEST_KEY_DB_CATALOG_VERSION                             "db-catalog-version"
@@ -1791,6 +1940,8 @@ manifestLoadCallback(void *callbackData, const String *const section, const Stri
         FUNCTION_TEST_PARAM(STRING, value);
     FUNCTION_TEST_END();
 
+    FUNCTION_AUDIT_CALLBACK();
+
     ASSERT(callbackData != NULL);
     ASSERT(section != NULL);
     ASSERT(key != NULL);
@@ -1806,6 +1957,13 @@ manifestLoadCallback(void *callbackData, const String *const section, const Stri
         JsonRead *const json = jsonReadNew(value);
         jsonReadObjectBegin(json);
 
+        // Block incremental info
+        if (jsonReadKeyExpectStrId(json, MANIFEST_KEY_BLOCK_INCR_MAP_SIZE))
+            file.blockIncrMapSize = jsonReadUInt64(json);
+
+        if (jsonReadKeyExpectStrId(json, MANIFEST_KEY_BLOCK_INCR_SIZE))
+            file.blockIncrSize = jsonReadUInt64(json) * BLOCK_INCR_SIZE_FACTOR;
+
         // Bundle info
         if (jsonReadKeyExpectStrId(json, MANIFEST_KEY_BUNDLE_ID))
         {
@@ -1818,7 +1976,7 @@ manifestLoadCallback(void *callbackData, const String *const section, const Stri
         // The checksum might not exist if this is a partial save that was done during the backup to preserve checksums for already
         // backed up files
         if (jsonReadKeyExpectStrId(json, MANIFEST_KEY_CHECKSUM))
-            memcpy(file.checksumSha1, strZ(jsonReadStr(json)), HASH_TYPE_SHA1_SIZE_HEX + 1);
+            file.checksumSha1 = bufPtr(bufNewDecode(encodingHex, jsonReadStr(json)));
 
         // Page checksum errors
         if (jsonReadKeyExpectZ(json, MANIFEST_KEY_CHECKSUM_PAGE))
@@ -1841,6 +1999,11 @@ manifestLoadCallback(void *callbackData, const String *const section, const Stri
             file.mode = cvtZToMode(strZ(jsonReadStr(json)));
         else
             file.mode = manifest->fileModeDefault;
+
+        // The repo checksum might not exist if this is a partial save that was done during the backup to preserve checksums for
+        // already backed up files or if this is an older manifest
+        if (jsonReadKeyExpectStrId(json, MANIFEST_KEY_CHECKSUM_REPO))
+            file.checksumRepoSha1 = bufPtr(bufNewDecode(encodingHex, jsonReadStr(json)));
 
         // Reference
         if (jsonReadKeyExpectStrId(json, MANIFEST_KEY_REFERENCE))
@@ -1872,7 +2035,7 @@ manifestLoadCallback(void *callbackData, const String *const section, const Stri
 
         // If file size is zero then assign the static zero hash
         if (file.size == 0)
-            memcpy(file.checksumSha1, HASH_TYPE_SHA1_ZERO, HASH_TYPE_SHA1_SIZE_HEX + 1);
+            file.checksumSha1 = bufPtrConst(HASH_TYPE_SHA1_ZERO_BUF);
 
         // Timestamp is required so error if it is not present
         if (jsonReadKeyExpectStrId(json, MANIFEST_KEY_TIMESTAMP))
@@ -2061,6 +2224,8 @@ manifestLoadCallback(void *callbackData, const String *const section, const Stri
                 manifest->pub.data.archiveStart = varStr(jsonToVar(value));
             else if (strEqZ(key, MANIFEST_KEY_BACKUP_ARCHIVE_STOP))
                 manifest->pub.data.archiveStop = varStr(jsonToVar(value));
+            else if (strEqZ(key, MANIFEST_KEY_BACKUP_BLOCK_INCR))
+                manifest->pub.data.blockIncr = varBool(jsonToVar(value));
             else if (strEqZ(key, MANIFEST_KEY_BACKUP_BUNDLE))
                 manifest->pub.data.bundle = varBool(jsonToVar(value));
             else if (strEqZ(key, MANIFEST_KEY_BACKUP_LABEL))
@@ -2150,7 +2315,7 @@ manifestLoadCallback(void *callbackData, const String *const section, const Stri
     FUNCTION_TEST_RETURN_VOID();
 }
 
-Manifest *
+FN_EXTERN Manifest *
 manifestNewLoad(IoRead *read)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -2276,6 +2441,8 @@ manifestSaveCallback(void *const callbackData, const String *const sectionNext, 
         FUNCTION_TEST_PARAM(INFO_SAVE, infoSaveData);
     FUNCTION_TEST_END();
 
+    FUNCTION_AUDIT_CALLBACK();
+
     ASSERT(callbackData != NULL);
     ASSERT(infoSaveData != NULL);
 
@@ -2297,6 +2464,13 @@ manifestSaveCallback(void *const callbackData, const String *const sectionNext, 
             infoSaveValue(
                 infoSaveData, MANIFEST_SECTION_BACKUP, MANIFEST_KEY_BACKUP_ARCHIVE_STOP,
                 jsonFromVar(VARSTR(manifest->pub.data.archiveStop)));
+        }
+
+        if (manifest->pub.data.blockIncr)
+        {
+            infoSaveValue(
+                infoSaveData, MANIFEST_SECTION_BACKUP, MANIFEST_KEY_BACKUP_BLOCK_INCR,
+                jsonFromVar(VARBOOL(manifest->pub.data.blockIncr)));
         }
 
         if (manifest->pub.data.bundle)
@@ -2517,6 +2691,16 @@ manifestSaveCallback(void *const callbackData, const String *const sectionNext, 
                 const ManifestFile file = manifestFile(manifest, fileIdx);
                 JsonWrite *const json = jsonWriteObjectBegin(jsonWriteNewP());
 
+                // Block incremental info
+                if (file.blockIncrMapSize != 0)
+                    jsonWriteUInt64(jsonWriteKeyStrId(json, MANIFEST_KEY_BLOCK_INCR_MAP_SIZE), file.blockIncrMapSize);
+
+                if (file.blockIncrSize != 0)
+                {
+                    jsonWriteUInt64(
+                        jsonWriteKeyStrId(json, MANIFEST_KEY_BLOCK_INCR_SIZE), file.blockIncrSize / BLOCK_INCR_SIZE_FACTOR);
+                }
+
                 // Bundle info
                 if (file.bundleId != 0)
                 {
@@ -2528,8 +2712,12 @@ manifestSaveCallback(void *const callbackData, const String *const sectionNext, 
 
                 // Save if the file size is not zero and the checksum exists.  The checksum might not exist if this is a partial
                 // save performed during a backup.
-                if (file.size != 0 && file.checksumSha1[0] != 0)
-                    jsonWriteZ(jsonWriteKeyStrId(json, MANIFEST_KEY_CHECKSUM), file.checksumSha1);
+                if (file.size != 0 && file.checksumSha1 != NULL)
+                {
+                    jsonWriteStr(
+                        jsonWriteKeyStrId(json, MANIFEST_KEY_CHECKSUM),
+                        strNewEncode(encodingHex, BUF(file.checksumSha1, HASH_TYPE_SHA1_SIZE)));
+                }
 
                 if (file.checksumPage)
                 {
@@ -2544,6 +2732,15 @@ manifestSaveCallback(void *const callbackData, const String *const sectionNext, 
 
                 if (file.mode != saveData->fileModeDefault)
                     jsonWriteStrFmt(jsonWriteKeyZ(json, MANIFEST_KEY_MODE), "%04o", file.mode);
+
+                // Save if the repo checksum is not null. The repo checksum for zero-length files may vary depending on compression
+                // and encryption applied.
+                if (file.checksumRepoSha1 != NULL)
+                {
+                    jsonWriteStr(
+                        jsonWriteKeyStrId(json, MANIFEST_KEY_CHECKSUM_REPO),
+                        strNewEncode(encodingHex, BUF(file.checksumRepoSha1, HASH_TYPE_SHA1_SIZE)));
+                }
 
                 if (file.reference != NULL)
                     jsonWriteStr(jsonWriteKeyStrId(json, MANIFEST_KEY_REFERENCE), file.reference);
@@ -2656,7 +2853,7 @@ manifestSaveCallback(void *const callbackData, const String *const sectionNext, 
     FUNCTION_TEST_RETURN_VOID();
 }
 
-void
+FN_EXTERN void
 manifestSave(Manifest *this, IoWrite *write)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -2693,7 +2890,7 @@ manifestSave(Manifest *this, IoWrite *write)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 manifestValidate(Manifest *this, bool strict)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -2713,15 +2910,19 @@ manifestValidate(Manifest *this, bool strict)
             const ManifestFile file = manifestFile(this, fileIdx);
 
             // All files must have a checksum
-            if (file.checksumSha1[0] == '\0')
+            if (file.checksumSha1 == NULL)
                 strCatFmt(error, "\nmissing checksum for file '%s'", strZ(file.name));
 
             // These are strict checks to be performed only after a backup and before the final manifest save
             if (strict)
             {
                 // Zero-length files must have a specific checksum
-                if (file.size == 0 && !strEqZ(HASH_TYPE_SHA1_ZERO_STR, file.checksumSha1))
-                    strCatFmt(error, "\ninvalid checksum '%s' for zero size file '%s'", file.checksumSha1, strZ(file.name));
+                if (file.size == 0 && !bufEq(HASH_TYPE_SHA1_ZERO_BUF, BUF(file.checksumSha1, HASH_TYPE_SHA1_SIZE)))
+                {
+                    strCatFmt(
+                        error, "\ninvalid checksum '%s' for zero size file '%s'",
+                        strZ(strNewEncode(encodingHex, BUF(file.checksumSha1, HASH_TYPE_SHA1_SIZE))), strZ(file.name));
+                }
 
                 // Non-zero size files must have non-zero repo size
                 if (file.sizeRepo == 0 && file.size != 0)
@@ -2736,28 +2937,6 @@ manifestValidate(Manifest *this, bool strict)
     MEM_CONTEXT_TEMP_END();
 
     FUNCTION_LOG_RETURN_VOID();
-}
-
-/***********************************************************************************************************************************
-Db functions and getters/setters
-***********************************************************************************************************************************/
-const ManifestDb *
-manifestDbFind(const Manifest *this, const String *name)
-{
-    FUNCTION_TEST_BEGIN();
-        FUNCTION_TEST_PARAM(MANIFEST, this);
-        FUNCTION_TEST_PARAM(STRING, name);
-    FUNCTION_TEST_END();
-
-    ASSERT(this != NULL);
-    ASSERT(name != NULL);
-
-    const ManifestDb *result = lstFind(this->pub.dbList, &name);
-
-    if (result == NULL)
-        THROW_FMT(AssertError, "unable to find '%s' in manifest db list", strZ(name));
-
-    FUNCTION_TEST_RETURN_CONST(MANIFEST_DB, result);
 }
 
 /***********************************************************************************************************************************
@@ -2796,7 +2975,7 @@ manifestFilePackFind(const Manifest *this, const String *name)
     FUNCTION_TEST_RETURN_TYPE_P(ManifestFilePack, *manifestFilePackFindInternal(this, name));
 }
 
-void
+FN_EXTERN void
 manifestFileRemove(const Manifest *this, const String *name)
 {
     FUNCTION_TEST_BEGIN();
@@ -2813,7 +2992,7 @@ manifestFileRemove(const Manifest *this, const String *name)
     FUNCTION_TEST_RETURN_VOID();
 }
 
-void
+FN_EXTERN void
 manifestFileUpdate(Manifest *const this, const ManifestFile *const file)
 {
     FUNCTION_TEST_BEGIN();
@@ -2838,7 +3017,7 @@ manifestFileUpdate(Manifest *const this, const ManifestFile *const file)
 /***********************************************************************************************************************************
 Link functions and getters/setters
 ***********************************************************************************************************************************/
-const ManifestLink *
+FN_EXTERN const ManifestLink *
 manifestLinkFind(const Manifest *this, const String *name)
 {
     FUNCTION_TEST_BEGIN();
@@ -2857,7 +3036,7 @@ manifestLinkFind(const Manifest *this, const String *name)
     FUNCTION_TEST_RETURN_CONST(MANIFEST_LINK, result);
 }
 
-void
+FN_EXTERN void
 manifestLinkRemove(const Manifest *this, const String *name)
 {
     FUNCTION_TEST_BEGIN();
@@ -2874,7 +3053,7 @@ manifestLinkRemove(const Manifest *this, const String *name)
     FUNCTION_TEST_RETURN_VOID();
 }
 
-void
+FN_EXTERN void
 manifestLinkUpdate(const Manifest *this, const String *name, const String *destination)
 {
     FUNCTION_TEST_BEGIN();
@@ -2902,7 +3081,7 @@ manifestLinkUpdate(const Manifest *this, const String *name, const String *desti
 /***********************************************************************************************************************************
 Path functions and getters/setters
 ***********************************************************************************************************************************/
-const ManifestPath *
+FN_EXTERN const ManifestPath *
 manifestPathFind(const Manifest *this, const String *name)
 {
     FUNCTION_TEST_BEGIN();
@@ -2921,7 +3100,7 @@ manifestPathFind(const Manifest *this, const String *name)
     FUNCTION_TEST_RETURN_CONST(MANIFEST_PATH, result);
 }
 
-String *
+FN_EXTERN String *
 manifestPathPg(const String *manifestPath)
 {
     FUNCTION_TEST_BEGIN();
@@ -2951,7 +3130,7 @@ manifestPathPg(const String *manifestPath)
 /***********************************************************************************************************************************
 Target functions and getters/setters
 ***********************************************************************************************************************************/
-const ManifestTarget *
+FN_EXTERN const ManifestTarget *
 manifestTargetFind(const Manifest *this, const String *name)
 {
     FUNCTION_TEST_BEGIN();
@@ -2970,7 +3149,7 @@ manifestTargetFind(const Manifest *this, const String *name)
     FUNCTION_TEST_RETURN_CONST(MANIFEST_TARGET, result);
 }
 
-String *
+FN_EXTERN String *
 manifestTargetPath(const Manifest *this, const ManifestTarget *target)
 {
     FUNCTION_TEST_BEGIN();
@@ -3008,7 +3187,7 @@ manifestTargetPath(const Manifest *this, const ManifestTarget *target)
     FUNCTION_TEST_RETURN(STRING, result);
 }
 
-void
+FN_EXTERN void
 manifestTargetRemove(const Manifest *this, const String *name)
 {
     FUNCTION_TEST_BEGIN();
@@ -3025,7 +3204,7 @@ manifestTargetRemove(const Manifest *this, const String *name)
     FUNCTION_TEST_RETURN_VOID();
 }
 
-void
+FN_EXTERN void
 manifestTargetUpdate(const Manifest *this, const String *name, const String *path, const String *file)
 {
     FUNCTION_TEST_BEGIN();
@@ -3059,7 +3238,7 @@ manifestTargetUpdate(const Manifest *this, const String *name, const String *pat
 /***********************************************************************************************************************************
 Getters/Setters
 ***********************************************************************************************************************************/
-void
+FN_EXTERN void
 manifestBackupLabelSet(Manifest *this, const String *backupLabel)
 {
     FUNCTION_TEST_BEGIN();
@@ -3128,7 +3307,7 @@ manifestLoadFileCallback(void *const data, const unsigned int try)
     FUNCTION_LOG_RETURN(BOOL, result);
 }
 
-Manifest *
+FN_EXTERN Manifest *
 manifestLoadFile(const Storage *storage, const String *fileName, CipherType cipherType, const String *cipherPass)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);

@@ -44,18 +44,18 @@ typedef struct Lz4Compress
 /***********************************************************************************************************************************
 Render as string for logging
 ***********************************************************************************************************************************/
-static String *
-lz4CompressToLog(const Lz4Compress *this)
+static void
+lz4CompressToLog(const Lz4Compress *const this, StringStatic *const debugLog)
 {
-    return strNewFmt(
-        "{level: %d, first: %s, inputSame: %s, flushing: %s}", this->prefs.compressionLevel,
+    strStcFmt(
+        debugLog, "{level: %d, first: %s, inputSame: %s, flushing: %s}", this->prefs.compressionLevel,
         cvtBoolToConstZ(this->first), cvtBoolToConstZ(this->inputSame), cvtBoolToConstZ(this->flushing));
 }
 
 #define FUNCTION_LOG_LZ4_COMPRESS_TYPE                                                                                             \
     Lz4Compress *
 #define FUNCTION_LOG_LZ4_COMPRESS_FORMAT(value, buffer, bufferSize)                                                                \
-    FUNCTION_LOG_STRING_OBJECT_FORMAT(value, lz4CompressToLog, buffer, bufferSize)
+    FUNCTION_LOG_OBJECT_FORMAT(value, lz4CompressToLog, buffer, bufferSize)
 
 /***********************************************************************************************************************************
 Free compression context
@@ -242,20 +242,20 @@ lz4CompressInputSame(const THIS_VOID)
 }
 
 /**********************************************************************************************************************************/
-IoFilter *
+FN_EXTERN IoFilter *
 lz4CompressNew(int level)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
         FUNCTION_LOG_PARAM(INT, level);
     FUNCTION_LOG_END();
 
-    ASSERT(level >= 0);
+    ASSERT(level >= LZ4_COMPRESS_LEVEL_MIN && level <= LZ4_COMPRESS_LEVEL_MAX);
 
     IoFilter *this = NULL;
 
     OBJ_NEW_BEGIN(Lz4Compress, .childQty = MEM_CONTEXT_QTY_MAX, .allocQty = MEM_CONTEXT_QTY_MAX, .callbackQty = 1)
     {
-        Lz4Compress *driver = OBJ_NEW_ALLOC();
+        Lz4Compress *const driver = OBJ_NAME(OBJ_NEW_ALLOC(), IoFilter::Lz4Compress);
 
         *driver = (Lz4Compress)
         {

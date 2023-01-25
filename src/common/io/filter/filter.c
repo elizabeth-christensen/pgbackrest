@@ -20,7 +20,7 @@ struct IoFilter
 /***********************************************************************************************************************************
 Allocations will be in the memory context of the caller.
 ***********************************************************************************************************************************/
-IoFilter *
+FN_EXTERN IoFilter *
 ioFilterNew(const StringId type, void *const driver, Pack *const paramList, const IoFilterInterface interface)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
@@ -57,7 +57,7 @@ ioFilterNew(const StringId type, void *const driver, Pack *const paramList, cons
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 ioFilterProcessIn(IoFilter *this, const Buffer *input)
 {
     FUNCTION_TEST_BEGIN();
@@ -79,7 +79,7 @@ ioFilterProcessIn(IoFilter *this, const Buffer *input)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 ioFilterProcessInOut(IoFilter *this, const Buffer *input, Buffer *output)
 {
     FUNCTION_TEST_BEGIN();
@@ -110,7 +110,7 @@ ioFilterProcessInOut(IoFilter *this, const Buffer *input, Buffer *output)
 If done is not defined by the filter then check inputSame.  If inputSame is true then the filter is not done.  Even if the filter
 is done the interface will not report done until the interface is flushing.
 ***********************************************************************************************************************************/
-bool
+FN_EXTERN bool
 ioFilterDone(const IoFilter *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -128,7 +128,7 @@ ioFilterDone(const IoFilter *this)
 }
 
 /**********************************************************************************************************************************/
-bool
+FN_EXTERN bool
 ioFilterInputSame(const IoFilter *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -141,7 +141,7 @@ ioFilterInputSame(const IoFilter *this)
 }
 
 /**********************************************************************************************************************************/
-Pack *
+FN_EXTERN Pack *
 ioFilterResult(const IoFilter *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -154,8 +154,10 @@ ioFilterResult(const IoFilter *this)
 }
 
 /**********************************************************************************************************************************/
-String *
-ioFilterToLog(const IoFilter *this)
+FN_EXTERN void
+ioFilterToLog(const IoFilter *const this, StringStatic *const debugLog)
 {
-    return strNewFmt("{type: %s}", strZ(strIdToStr(ioFilterType(this))));
+    strStcCat(debugLog, "{type: ");
+    strStcResultSizeInc(debugLog, strIdToLog(ioFilterType(this), strStcRemains(debugLog), strStcRemainsSize(debugLog)));
+    strStcCatChr(debugLog, '}');
 }

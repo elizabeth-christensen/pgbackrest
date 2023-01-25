@@ -11,7 +11,7 @@ Azure Storage Helper
 #include "storage/azure/helper.h"
 
 /**********************************************************************************************************************************/
-Storage *
+FN_EXTERN Storage *
 storageAzureHelper(const unsigned int repoIdx, const bool write, StoragePathExpressionCallback pathExpressionCallback)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -57,7 +57,7 @@ storageAzureHelper(const unsigned int repoIdx, const bool write, StoragePathExpr
         {
             TRY_BEGIN()
             {
-                bufNewDecode(encodeBase64, key);
+                bufNewDecode(encodingBase64, key);
             }
             CATCH(FormatError)
             {

@@ -48,6 +48,8 @@ storagePosixInfo(THIS_VOID, const String *file, StorageInfoLevel level, StorageI
         FUNCTION_LOG_PARAM(BOOL, param.followLink);
     FUNCTION_LOG_END();
 
+    FUNCTION_AUDIT_STRUCT();
+
     ASSERT(this != NULL);
     ASSERT(file != NULL);
 
@@ -113,7 +115,7 @@ storagePosixInfo(THIS_VOID, const String *file, StorageInfoLevel level, StorageI
 }
 
 /**********************************************************************************************************************************/
-void
+static void
 storagePosixLinkCreate(
     THIS_VOID, const String *const target, const String *const linkPath, const StorageInterfaceLinkCreateParam param)
 {
@@ -166,6 +168,8 @@ storagePosixListEntry(
         FUNCTION_TEST_PARAM(STRINGZ, name);
         FUNCTION_TEST_PARAM(ENUM, level);
     FUNCTION_TEST_END();
+
+    FUNCTION_AUDIT_HELPER();
 
     ASSERT(this != NULL);
     ASSERT(list != NULL);
@@ -388,7 +392,7 @@ storagePosixNewWrite(THIS_VOID, const String *file, StorageInterfaceNewWritePara
 }
 
 /**********************************************************************************************************************************/
-void
+static void
 storagePosixPathCreate(
     THIS_VOID, const String *const path, const bool errorOnExists, const bool noParentCreate, const mode_t mode,
     const StorageInterfacePathCreateParam param)
@@ -498,7 +502,7 @@ storagePosixPathRemove(THIS_VOID, const String *path, bool recurse, StorageInter
 }
 
 /**********************************************************************************************************************************/
-void
+static void
 storagePosixPathSync(THIS_VOID, const String *path, StorageInterfacePathSyncParam param)
 {
     THIS(StoragePosix);
@@ -584,7 +588,7 @@ static const StorageInterface storageInterfacePosix =
     .remove = storagePosixRemove,
 };
 
-Storage *
+FN_EXTERN Storage *
 storagePosixNewInternal(
     StringId type, const String *path, mode_t modeFile, mode_t modePath, bool write,
     StoragePathExpressionCallback pathExpressionFunction, bool pathSync)
@@ -612,7 +616,7 @@ storagePosixNewInternal(
 
     OBJ_NEW_BEGIN(StoragePosix, .childQty = MEM_CONTEXT_QTY_MAX, .allocQty = MEM_CONTEXT_QTY_MAX)
     {
-        StoragePosix *driver = OBJ_NEW_ALLOC();
+        StoragePosix *const driver = OBJ_NAME(OBJ_NEW_ALLOC(), Storage::StoragePosix);
 
         *driver = (StoragePosix)
         {
@@ -636,7 +640,7 @@ storagePosixNewInternal(
     FUNCTION_LOG_RETURN(STORAGE, this);
 }
 
-Storage *
+FN_EXTERN Storage *
 storagePosixNew(const String *path, StoragePosixNewParam param)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);

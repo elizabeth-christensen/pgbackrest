@@ -30,7 +30,7 @@ static struct
 /***********************************************************************************************************************************
 Set filter handlers
 ***********************************************************************************************************************************/
-void
+FN_EXTERN void
 storageRemoteFilterHandlerSet(const StorageRemoteFilterHandler *filterHandler, unsigned int filterHandlerSize)
 {
     FUNCTION_TEST_BEGIN();
@@ -124,13 +124,15 @@ storageRemoteFilterGroup(IoFilterGroup *const filterGroup, const Pack *const fil
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 storageRemoteFeatureProtocol(PackRead *const param, ProtocolServer *const server)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
         FUNCTION_LOG_PARAM(PACK_READ, param);
         FUNCTION_LOG_PARAM(PROTOCOL_SERVER, server);
     FUNCTION_LOG_END();
+
+    FUNCTION_AUDIT_HELPER();
 
     ASSERT(param == NULL);
     ASSERT(server != NULL);
@@ -172,7 +174,6 @@ storageRemoteFeatureProtocol(PackRead *const param, ProtocolServer *const server
 /**********************************************************************************************************************************/
 typedef struct StorageRemoteInfoProcotolWriteData
 {
-    MemContext *memContext;                                         // Mem context used to store values from last call
     time_t timeModifiedLast;                                        // timeModified from last call
     mode_t modeLast;                                                // mode from last call
     uid_t userIdLast;                                               // userId from last call
@@ -194,6 +195,8 @@ storageRemoteInfoProtocolPut(
         FUNCTION_TEST_PARAM(PACK_WRITE, write);
         FUNCTION_TEST_PARAM(STORAGE_INFO, info);
     FUNCTION_TEST_END();
+
+    FUNCTION_AUDIT_HELPER();
 
     ASSERT(data != NULL);
     ASSERT(write != NULL);
@@ -240,42 +243,28 @@ storageRemoteInfoProtocolPut(
             pckWriteStrP(write, info->linkDestination);
     }
 
-    // Store defaults to use for the next call. If memContext is NULL this function is only being called one time so there is no
-    // point in storing defaults.
-    if (data->memContext != NULL)
+    // Store defaults to use for the next call
+    data->timeModifiedLast = info->timeModified;
+    data->modeLast = info->mode;
+    data->userIdLast = info->userId;
+    data->groupIdLast = info->groupId;
+
+    if (info->user != NULL && !strEq(info->user, data->user))                                                       // {vm_covered}
     {
-        data->timeModifiedLast = info->timeModified;
-        data->modeLast = info->mode;
-        data->userIdLast = info->userId;
-        data->groupIdLast = info->groupId;
+        strFree(data->user);
+        data->user = strDup(info->user);
+    }
 
-        if (info->user != NULL && !strEq(info->user, data->user))                                                   // {vm_covered}
-        {
-            strFree(data->user);
-
-            MEM_CONTEXT_BEGIN(data->memContext)
-            {
-                data->user = strDup(info->user);
-            }
-            MEM_CONTEXT_END();
-        }
-
-        if (info->group != NULL && !strEq(info->group, data->group))                                                // {vm_covered}
-        {
-            strFree(data->group);
-
-            MEM_CONTEXT_BEGIN(data->memContext)
-            {
-                data->group = strDup(info->group);
-            }
-            MEM_CONTEXT_END();
-        }
+    if (info->group != NULL && !strEq(info->group, data->group))                                                    // {vm_covered}
+    {
+        strFree(data->group);
+        data->group = strDup(info->group);
     }
 
     FUNCTION_TEST_RETURN_VOID();
 }
 
-void
+FN_EXTERN void
 storageRemoteInfoProtocol(PackRead *const param, ProtocolServer *const server)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -312,7 +301,7 @@ storageRemoteInfoProtocol(PackRead *const param, ProtocolServer *const server)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 storageRemoteLinkCreateProtocol(PackRead *const param, ProtocolServer *const server)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -339,7 +328,7 @@ storageRemoteLinkCreateProtocol(PackRead *const param, ProtocolServer *const ser
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 storageRemoteListProtocol(PackRead *const param, ProtocolServer *const server)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -355,7 +344,7 @@ storageRemoteListProtocol(PackRead *const param, ProtocolServer *const server)
     {
         const String *const path = pckReadStrP(param);
         const StorageInfoLevel level = (StorageInfoLevel)pckReadU32P(param);
-        StorageRemoteInfoProtocolWriteData writeData = {.memContext = memContextCurrent()};
+        StorageRemoteInfoProtocolWriteData writeData = {0};
         StorageList *const list = storageInterfaceListP(storageRemoteProtocolLocal.driver, path, level);
 
         // Put list
@@ -386,7 +375,7 @@ storageRemoteListProtocol(PackRead *const param, ProtocolServer *const server)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 storageRemoteOpenReadProtocol(PackRead *const param, ProtocolServer *const server)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -456,7 +445,7 @@ storageRemoteOpenReadProtocol(PackRead *const param, ProtocolServer *const serve
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 storageRemoteOpenWriteProtocol(PackRead *const param, ProtocolServer *const server)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -543,7 +532,7 @@ storageRemoteOpenWriteProtocol(PackRead *const param, ProtocolServer *const serv
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 storageRemotePathCreateProtocol(PackRead *const param, ProtocolServer *const server)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -571,7 +560,7 @@ storageRemotePathCreateProtocol(PackRead *const param, ProtocolServer *const ser
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 storageRemotePathRemoveProtocol(PackRead *const param, ProtocolServer *const server)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -599,7 +588,7 @@ storageRemotePathRemoveProtocol(PackRead *const param, ProtocolServer *const ser
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 storageRemotePathSyncProtocol(PackRead *const param, ProtocolServer *const server)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -624,7 +613,7 @@ storageRemotePathSyncProtocol(PackRead *const param, ProtocolServer *const serve
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 storageRemoteRemoveProtocol(PackRead *const param, ProtocolServer *const server)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);

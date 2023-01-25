@@ -17,7 +17,6 @@ S3 Storage
 #include "common/type/json.h"
 #include "common/type/xml.h"
 #include "storage/s3/read.h"
-#include "storage/s3/storage.intern.h"
 #include "storage/s3/write.h"
 
 /***********************************************************************************************************************************
@@ -204,7 +203,7 @@ storageS3Auth(
         // Generate string to sign
         const String *stringToSign = strNewFmt(
             AWS4_HMAC_SHA256 "\n%s\n%s/%s/" S3 "/" AWS4_REQUEST "\n%s", strZ(dateTime), strZ(date), strZ(this->region),
-            strZ(bufHex(cryptoHashOne(hashTypeSha256, BUFSTR(canonicalRequest)))));
+            strZ(strNewEncode(encodingHex, cryptoHashOne(hashTypeSha256, BUFSTR(canonicalRequest)))));
 
         // Generate signing key.  This key only needs to be regenerated every seven days but we'll do it once a day to keep the
         // logic simple.  It's a relatively expensive operation so we'd rather not do it for every request.
@@ -229,7 +228,7 @@ storageS3Auth(
         const String *authorization = strNewFmt(
             AWS4_HMAC_SHA256 " Credential=%s/%s/%s/" S3 "/" AWS4_REQUEST ",SignedHeaders=%s,Signature=%s",
             strZ(this->accessKey), strZ(date), strZ(this->region), strZ(signedHeaders),
-            strZ(bufHex(cryptoHmacOne(hashTypeSha256, this->signingKey, BUFSTR(stringToSign)))));
+            strZ(strNewEncode(encodingHex, cryptoHmacOne(hashTypeSha256, this->signingKey, BUFSTR(stringToSign)))));
 
         httpHeaderPut(httpHeader, HTTP_HEADER_AUTHORIZATION_STR, authorization);
     }
@@ -443,7 +442,7 @@ storageS3AuthWebId(StorageS3 *const this, const HttpHeader *const header)
 /***********************************************************************************************************************************
 Process S3 request
 ***********************************************************************************************************************************/
-HttpRequest *
+FN_EXTERN HttpRequest *
 storageS3RequestAsync(StorageS3 *this, const String *verb, const String *path, StorageS3RequestAsyncParam param)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -476,7 +475,8 @@ storageS3RequestAsync(StorageS3 *this, const String *verb, const String *path, S
         if (param.content != NULL)
         {
             httpHeaderAdd(
-                requestHeader, HTTP_HEADER_CONTENT_MD5_STR, strNewEncode(encodeBase64, cryptoHashOne(hashTypeMd5, param.content)));
+                requestHeader, HTTP_HEADER_CONTENT_MD5_STR,
+                strNewEncode(encodingBase64, cryptoHashOne(hashTypeMd5, param.content)));
         }
 
         // Set KMS headers when requested
@@ -531,8 +531,10 @@ storageS3RequestAsync(StorageS3 *this, const String *verb, const String *path, S
         // Generate authorization header
         storageS3Auth(
             this, verb, path, param.query, storageS3DateTime(time(NULL)), requestHeader,
-            param.content == NULL || bufEmpty(param.content) ?
-                HASH_TYPE_SHA256_ZERO_STR : bufHex(cryptoHashOne(hashTypeSha256, param.content)));
+            strNewEncode(
+                encodingHex,
+                param.content == NULL || bufEmpty(param.content) ?
+                    HASH_TYPE_SHA256_ZERO_BUF : cryptoHashOne(hashTypeSha256, param.content)));
 
         // Send request
         MEM_CONTEXT_PRIOR_BEGIN()
@@ -547,7 +549,7 @@ storageS3RequestAsync(StorageS3 *this, const String *verb, const String *path, S
     FUNCTION_LOG_RETURN(HTTP_REQUEST, result);
 }
 
-HttpResponse *
+FN_EXTERN HttpResponse *
 storageS3Response(HttpRequest *request, StorageS3ResponseParam param)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -577,7 +579,7 @@ storageS3Response(HttpRequest *request, StorageS3ResponseParam param)
     FUNCTION_LOG_RETURN(HTTP_RESPONSE, result);
 }
 
-HttpResponse *
+FN_EXTERN HttpResponse *
 storageS3Request(StorageS3 *this, const String *verb, const String *path, StorageS3RequestParam param)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -619,6 +621,8 @@ storageS3ListInternal(
         FUNCTION_LOG_PARAM(FUNCTIONP, callback);
         FUNCTION_LOG_PARAM_P(VOID, callbackData);
     FUNCTION_LOG_END();
+
+    FUNCTION_AUDIT_CALLBACK();
 
     ASSERT(this != NULL);
     ASSERT(path != NULL);
@@ -1087,7 +1091,7 @@ static const StorageInterface storageInterfaceS3 =
     .remove = storageS3Remove,
 };
 
-Storage *
+FN_EXTERN Storage *
 storageS3New(
     const String *path, bool write, StoragePathExpressionCallback pathExpressionFunction, const String *bucket,
     const String *endPoint, StorageS3UriStyle uriStyle, const String *region, StorageS3KeyType keyType, const String *accessKey,
@@ -1129,7 +1133,7 @@ storageS3New(
 
     OBJ_NEW_BEGIN(StorageS3, .childQty = MEM_CONTEXT_QTY_MAX, .allocQty = MEM_CONTEXT_QTY_MAX)
     {
-        StorageS3 *driver = OBJ_NEW_ALLOC();
+        StorageS3 *const driver = OBJ_NAME(OBJ_NEW_ALLOC(), Storage::StorageS3);
 
         *driver = (StorageS3)
         {

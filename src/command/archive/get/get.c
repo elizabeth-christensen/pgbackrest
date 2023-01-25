@@ -363,6 +363,8 @@ archiveGetCheck(const StringList *archiveRequestList)
         FUNCTION_LOG_PARAM(STRING_LIST, archiveRequestList);
     FUNCTION_LOG_END();
 
+    FUNCTION_AUDIT_STRUCT();
+
     ASSERT(archiveRequestList != NULL);
     ASSERT(!strLstEmpty(archiveRequestList));
 
@@ -597,7 +599,7 @@ queueNeed(const String *walSegment, bool found, uint64_t queueSize, size_t walSe
 }
 
 /**********************************************************************************************************************************/
-int
+FN_EXTERN int
 cmdArchiveGet(void)
 {
     FUNCTION_LOG_VOID(logLevelDebug);
@@ -843,7 +845,8 @@ typedef struct ArchiveGetAsyncData
     unsigned int archiveFileIdx;                                    // Current index in the list to be processed
 } ArchiveGetAsyncData;
 
-static ProtocolParallelJob *archiveGetAsyncCallback(void *data, unsigned int clientIdx)
+static ProtocolParallelJob *
+archiveGetAsyncCallback(void *const data, const unsigned int clientIdx)
 {
     FUNCTION_TEST_BEGIN();
         FUNCTION_TEST_PARAM_P(VOID, data);
@@ -894,7 +897,7 @@ static ProtocolParallelJob *archiveGetAsyncCallback(void *data, unsigned int cli
     FUNCTION_TEST_RETURN(PROTOCOL_PARALLEL_JOB, result);
 }
 
-void
+FN_EXTERN void
 cmdArchiveGetAsync(void)
 {
     FUNCTION_LOG_VOID(logLevelDebug);

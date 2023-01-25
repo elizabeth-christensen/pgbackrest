@@ -42,6 +42,15 @@ OBJ_NEW_END();
     MEM_CONTEXT_NEW_END()
 
 /***********************************************************************************************************************************
+Rename an object for auditing purposes. The original name for an object is based on the type used to create the object but a
+different name might be needed to identify it during auditing. For example, a filter named IoSink would need to be renamed to
+IoFilter to identify it as a filter for auditing.
+
+This only has an effect in test builds.
+***********************************************************************************************************************************/
+#define OBJ_NAME(this, name)                                        MEM_CONTEXT_AUDIT_ALLOC_EXTRA_NAME(this, name)
+
+/***********************************************************************************************************************************
 Used in interface function parameter lists to discourage use of the untyped thisVoid parameter, e.g.:
 
 size_t bufferRead(THIS_VOID, Buffer *buffer)
@@ -101,17 +110,17 @@ objMemContext(void *const this)
 }
 
 // Move an object to a new context if this != NULL
-void *objMove(THIS_VOID, MemContext *parentNew);
+FN_EXTERN void *objMove(THIS_VOID, MemContext *parentNew);
 
 // Move an object to a new context if this != NULL. The mem context to move must be the first member of the object struct. This
 // pattern is typically used by interfaces.
-void *objMoveContext(THIS_VOID, MemContext *parentNew);
+FN_EXTERN void *objMoveContext(THIS_VOID, MemContext *parentNew);
 
 // Free the object mem context if this != NULL
-void objFree(THIS_VOID);
+FN_EXTERN void objFree(THIS_VOID);
 
 // Free the object mem context if not NULL. The mem context to be freed must be the first member of the object struct. This pattern
 // is typically used by interfaces.
-void objFreeContext(THIS_VOID);
+FN_EXTERN void objFreeContext(THIS_VOID);
 
 #endif

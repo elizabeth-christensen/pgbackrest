@@ -51,17 +51,16 @@ typedef struct CipherBlock
 /***********************************************************************************************************************************
 Macros for function logging
 ***********************************************************************************************************************************/
-String *
-cipherBlockToLog(const CipherBlock *this)
+FN_EXTERN void
+cipherBlockToLog(const CipherBlock *const this, StringStatic *const debugLog)
 {
-    return strNewFmt(
-        "{inputSame: %s, done: %s}", cvtBoolToConstZ(this->inputSame), cvtBoolToConstZ(this->done));
+    strStcFmt(debugLog, "{inputSame: %s, done: %s}", cvtBoolToConstZ(this->inputSame), cvtBoolToConstZ(this->done));
 }
 
 #define FUNCTION_LOG_CIPHER_BLOCK_TYPE                                                                                             \
     CipherBlock *
 #define FUNCTION_LOG_CIPHER_BLOCK_FORMAT(value, buffer, bufferSize)                                                                \
-    FUNCTION_LOG_STRING_OBJECT_FORMAT(value, cipherBlockToLog, buffer, bufferSize)
+    FUNCTION_LOG_OBJECT_FORMAT(value, cipherBlockToLog, buffer, bufferSize)
 
 /***********************************************************************************************************************************
 Free cipher context
@@ -387,7 +386,7 @@ cipherBlockInputSame(const THIS_VOID)
 }
 
 /**********************************************************************************************************************************/
-IoFilter *
+FN_EXTERN IoFilter *
 cipherBlockNew(CipherMode mode, CipherType cipherType, const Buffer *pass, CipherBlockNewParam param)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
@@ -430,7 +429,7 @@ cipherBlockNew(CipherMode mode, CipherType cipherType, const Buffer *pass, Ciphe
 
     OBJ_NEW_BEGIN(CipherBlock, .childQty = MEM_CONTEXT_QTY_MAX, .allocQty = MEM_CONTEXT_QTY_MAX, .callbackQty = 1)
     {
-        CipherBlock *driver = OBJ_NEW_ALLOC();
+        CipherBlock *const driver = OBJ_NAME(OBJ_NEW_ALLOC(), IoFilter::CipherBlock);
 
         *driver = (CipherBlock)
         {
@@ -473,7 +472,7 @@ cipherBlockNew(CipherMode mode, CipherType cipherType, const Buffer *pass, Ciphe
     FUNCTION_LOG_RETURN(IO_FILTER, this);
 }
 
-IoFilter *
+FN_EXTERN IoFilter *
 cipherBlockNewPack(const Pack *const paramList)
 {
     IoFilter *result = NULL;
@@ -495,7 +494,7 @@ cipherBlockNewPack(const Pack *const paramList)
 }
 
 /**********************************************************************************************************************************/
-IoFilterGroup *
+FN_EXTERN IoFilterGroup *
 cipherBlockFilterGroupAdd(IoFilterGroup *filterGroup, CipherType type, CipherMode mode, const String *pass)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);

@@ -42,7 +42,7 @@ Statistics constants
 /***********************************************************************************************************************************
 Constructors
 ***********************************************************************************************************************************/
-HttpClient *httpClientNew(IoClient *ioClient, TimeMSec timeout);
+FN_EXTERN HttpClient *httpClientNew(IoClient *ioClient, TimeMSec timeout);
 
 /***********************************************************************************************************************************
 Getters/Setters
@@ -62,19 +62,19 @@ httpClientTimeout(const HttpClient *const this)
 Functions
 ***********************************************************************************************************************************/
 // Open a new session
-HttpSession *httpClientOpen(HttpClient *this);
+FN_EXTERN HttpSession *httpClientOpen(HttpClient *this);
 
 // Request/response finished cleanly so session can be reused
-void httpClientReuse(HttpClient *this, HttpSession *session);
+FN_EXTERN void httpClientReuse(HttpClient *this, HttpSession *session);
 
 /***********************************************************************************************************************************
 Macros for function logging
 ***********************************************************************************************************************************/
-String *httpClientToLog(const HttpClient *this);
+FN_EXTERN void httpClientToLog(const HttpClient *this, StringStatic *debugLog);
 
 #define FUNCTION_LOG_HTTP_CLIENT_TYPE                                                                                              \
     HttpClient *
 #define FUNCTION_LOG_HTTP_CLIENT_FORMAT(value, buffer, bufferSize)                                                                 \
-    FUNCTION_LOG_STRING_OBJECT_FORMAT(value, httpClientToLog, buffer, bufferSize)
+    FUNCTION_LOG_OBJECT_FORMAT(value, httpClientToLog, buffer, bufferSize)
 
 #endif

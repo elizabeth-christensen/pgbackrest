@@ -1201,6 +1201,16 @@ testRun(void)
         strLstAddZ(argList, TEST_BACKREST_EXE);
         hrnCfgArgRawZ(argList, cfgOptPgPath, "/path/to/db");
         hrnCfgArgRawZ(argList, cfgOptStanza, "db");
+        hrnCfgArgRawBool(argList, cfgOptRepoBlock, true);
+        strLstAddZ(argList, TEST_COMMAND_BACKUP);
+        TEST_ERROR(
+            configParse(storageTest, strLstSize(argList), strLstPtr(argList), false), OptionInvalidError,
+            "option 'repo1-block' not valid without option 'repo1-bundle'");
+
+        argList = strLstNew();
+        strLstAddZ(argList, TEST_BACKREST_EXE);
+        hrnCfgArgRawZ(argList, cfgOptPgPath, "/path/to/db");
+        hrnCfgArgRawZ(argList, cfgOptStanza, "db");
         hrnCfgArgRawZ(argList, cfgOptSpoolPath, "/path/to/spool");
         strLstAddZ(argList, TEST_COMMAND_ARCHIVE_GET);
         TEST_ERROR(
@@ -1541,7 +1551,7 @@ testRun(void)
 
         TEST_RESULT_BOOL(cfgOptionTest(cfgOptConfig), false, "config is not set");
         TEST_RESULT_INT(cfgOptionSource(cfgOptConfig), cfgSourceParam, "config is source param");
-        TEST_RESULT_BOOL(cfgOptionNegate(cfgOptConfig), true, "config is negated");
+        TEST_RESULT_BOOL(cfgOptionIdxNegate(cfgOptConfig, 0), true, "config is negated");
         TEST_RESULT_INT(cfgOptionSource(cfgOptStanza), cfgSourceParam, "stanza is source param");
         TEST_RESULT_STR_Z(cfgOptionStr(cfgOptStanza), "db", "stanza is set");
         TEST_RESULT_INT(cfgOptionSource(cfgOptStanza), cfgSourceParam, "stanza is source param");
@@ -1671,7 +1681,6 @@ testRun(void)
         TEST_RESULT_Z(cfgOptionGroupName(cfgOptGrpPg, 0), "pg1", "pg1 group display (cached)");
         TEST_RESULT_STR_Z(cfgOptionStr(cfgOptPgPath), "/path/to/db", "default pg-path");
         TEST_RESULT_STR_Z(varStr(cfgOptionVar(cfgOptPgPath)), "/path/to/db", "default pg-path as variant");
-        TEST_RESULT_BOOL(cfgOptionGroupValid(cfgOptGrpPg), true, "pg group is valid");
         TEST_RESULT_UINT(cfgOptionGroupIdxTotal(cfgOptGrpPg), 3, "pg1, pg2, and pg256 are set");
         TEST_RESULT_BOOL(cfgOptionIdxBool(cfgOptPgLocal, 1), true, "pg2-local is set");
         TEST_RESULT_BOOL(cfgOptionIdxTest(cfgOptPgHost, 1), false, "pg2-host is not set (pg2-local override)");
@@ -1706,7 +1715,7 @@ testRun(void)
         TEST_RESULT_INT(cfgOptionSource(cfgOptCompressLevel), cfgSourceConfig, "compress-level is source config");
         TEST_RESULT_BOOL(cfgOptionBool(cfgOptBackupStandby), false, "backup-standby not is set");
         TEST_RESULT_INT(cfgOptionSource(cfgOptBackupStandby), cfgSourceDefault, "backup-standby is source default");
-        TEST_RESULT_BOOL(cfgOptionReset(cfgOptBackupStandby), true, "backup-standby was reset");
+        TEST_RESULT_BOOL(cfgOptionIdxReset(cfgOptBackupStandby, 0), true, "backup-standby was reset");
         TEST_RESULT_BOOL(cfgOptionBool(cfgOptDelta), true, "delta is set");
         TEST_RESULT_INT(cfgOptionSource(cfgOptDelta), cfgSourceConfig, "delta is source config");
         TEST_RESULT_INT(cfgOptionInt64(cfgOptBufferSize), 65536, "buffer-size is set");

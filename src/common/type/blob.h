@@ -30,13 +30,13 @@ typedef struct Blob Blob;
 /***********************************************************************************************************************************
 Constructor
 ***********************************************************************************************************************************/
-Blob *blbNew(void);
+FN_EXTERN Blob *blbNew(void);
 
 /***********************************************************************************************************************************
 Functions
 ***********************************************************************************************************************************/
 // Add data to the blob
-const void *blbAdd(Blob *this, const void *data, size_t size);
+FN_EXTERN const void *blbAdd(Blob *this, const void *data, size_t size);
 
 /***********************************************************************************************************************************
 Destructor
@@ -53,6 +53,6 @@ Macros for function logging
 #define FUNCTION_LOG_BLOB_TYPE                                                                                                     \
     Blob *
 #define FUNCTION_LOG_BLOB_FORMAT(value, buffer, bufferSize)                                                                        \
-    objToLog(value, "Blob", buffer, bufferSize)
+    objNameToLog(value, "Blob", buffer, bufferSize)
 
 #endif

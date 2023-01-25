@@ -22,7 +22,7 @@ typedef struct Exec Exec;
 /***********************************************************************************************************************************
 Constructors
 ***********************************************************************************************************************************/
-Exec *execNew(const String *command, const StringList *param, const String *name, TimeMSec timeout);
+FN_EXTERN Exec *execNew(const String *command, const StringList *param, const String *name, TimeMSec timeout);
 
 /***********************************************************************************************************************************
 Getters/Setters
@@ -58,7 +58,7 @@ execMemContext(Exec *const this)
 Functions
 ***********************************************************************************************************************************/
 // Execute command
-void execOpen(Exec *this);
+FN_EXTERN void execOpen(Exec *this);
 
 /***********************************************************************************************************************************
 Destructor
@@ -75,6 +75,6 @@ Macros for function logging
 #define FUNCTION_LOG_EXEC_TYPE                                                                                                     \
     Exec *
 #define FUNCTION_LOG_EXEC_FORMAT(value, buffer, bufferSize)                                                                        \
-    objToLog(value, "Exec", buffer, bufferSize)
+    objNameToLog(value, "Exec", buffer, bufferSize)
 
 #endif

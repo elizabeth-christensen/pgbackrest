@@ -41,15 +41,19 @@ Ready file extension constants
 Format the warning when a file is dropped
 ***********************************************************************************************************************************/
 static String *
-archivePushDropWarning(const String *walFile, uint64_t queueMax)
+archivePushDropWarning(const String *const walFile, const uint64_t queueMax)
 {
     FUNCTION_TEST_BEGIN();
         FUNCTION_TEST_PARAM(STRING, walFile);
         FUNCTION_TEST_PARAM(UINT64, queueMax);
     FUNCTION_TEST_END();
 
-    FUNCTION_TEST_RETURN(
-        STRING, strNewFmt("dropped WAL file '%s' because archive queue exceeded %s", strZ(walFile), strZ(strSizeFormat(queueMax))));
+    String *const size = strSizeFormat(queueMax);
+    String *const result = strNewFmt("dropped WAL file '%s' because archive queue exceeded %s", strZ(walFile), strZ(size));
+
+    strFree(size);
+
+    FUNCTION_TEST_RETURN(STRING, result);
 }
 
 /***********************************************************************************************************************************
@@ -214,6 +218,8 @@ archivePushCheck(bool pgPathSet)
         FUNCTION_LOG_PARAM(BOOL, pgPathSet);
     FUNCTION_LOG_END();
 
+    FUNCTION_AUDIT_STRUCT();
+
     ArchivePushCheckResult result = {.repoList = lstNewP(sizeof(ArchivePushFileRepoData)), .errorList = strLstNew()};
 
     MEM_CONTEXT_TEMP_BEGIN()
@@ -304,7 +310,7 @@ archivePushCheck(bool pgPathSet)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 cmdArchivePush(void)
 {
     FUNCTION_LOG_VOID(logLevelDebug);
@@ -513,7 +519,7 @@ archivePushAsyncCallback(void *data, unsigned int clientIdx)
     FUNCTION_TEST_RETURN(PROTOCOL_PARALLEL_JOB, result);
 }
 
-void
+FN_EXTERN void
 cmdArchivePushAsync(void)
 {
     FUNCTION_LOG_VOID(logLevelDebug);

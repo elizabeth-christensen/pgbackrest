@@ -15,7 +15,7 @@ typedef struct Wait Wait;
 /***********************************************************************************************************************************
 Constructors
 ***********************************************************************************************************************************/
-Wait *waitNew(TimeMSec waitTime);
+FN_EXTERN Wait *waitNew(TimeMSec waitTime);
 
 /***********************************************************************************************************************************
 Getters/Setters
@@ -36,7 +36,7 @@ waitRemaining(const Wait *const this)
 Functions
 ***********************************************************************************************************************************/
 // Wait and return whether the caller has more time left
-bool waitMore(Wait *this);
+FN_EXTERN bool waitMore(Wait *this);
 
 /***********************************************************************************************************************************
 Destructor
@@ -53,6 +53,6 @@ Macros for function logging
 #define FUNCTION_LOG_WAIT_TYPE                                                                                                     \
     Wait *
 #define FUNCTION_LOG_WAIT_FORMAT(value, buffer, bufferSize)                                                                        \
-    objToLog(value, "Wait", buffer, bufferSize)
+    objNameToLog(value, "Wait", buffer, bufferSize)
 
 #endif

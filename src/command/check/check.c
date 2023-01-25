@@ -110,6 +110,8 @@ checkPrimary(const DbGetResult dbGroup)
         FUNCTION_LOG_PARAM(DB_GET_RESULT, dbGroup);
     FUNCTION_LOG_END();
 
+    FUNCTION_AUDIT_HELPER();
+
     // If a primary is defined, check the configuration and perform a WAL switch and make sure the WAL is archived
     if (dbGroup.primary != NULL)
     {
@@ -164,7 +166,7 @@ checkPrimary(const DbGetResult dbGroup)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 cmdCheck(void)
 {
     FUNCTION_LOG_VOID(logLevelDebug);

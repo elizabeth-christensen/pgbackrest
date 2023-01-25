@@ -69,7 +69,7 @@ struct String
 };
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strNew(void)
 {
     FUNCTION_TEST_VOID();
@@ -150,7 +150,7 @@ strNewFixed(const size_t size)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strNewZ(const char *const string)
 {
     FUNCTION_TEST_BEGIN();
@@ -163,14 +163,14 @@ strNewZ(const char *const string)
     String *this = strNewFixed(strlen(string));
 
     // Assign string
-    strncpy(this->pub.buffer, string, strSize(this));
+    memcpy(this->pub.buffer, string, strSize(this));
     this->pub.buffer[strSize(this)] = '\0';
 
     FUNCTION_TEST_RETURN(STRING, this);
 }
 
 /**********************************************************************************************************************************/
-String *strNewDbl(double value)
+FN_EXTERN String *strNewDbl(double value)
 {
     FUNCTION_TEST_BEGIN();
         FUNCTION_TEST_PARAM(DOUBLE, value);
@@ -184,7 +184,7 @@ String *strNewDbl(double value)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strNewBuf(const Buffer *buffer)
 {
     FUNCTION_TEST_BEGIN();
@@ -206,8 +206,8 @@ strNewBuf(const Buffer *buffer)
 }
 
 /**********************************************************************************************************************************/
-String *
-strNewEncode(EncodeType type, const Buffer *buffer)
+FN_EXTERN String *
+strNewEncode(const EncodingType type, const Buffer *const buffer)
 {
     FUNCTION_TEST_BEGIN();
         FUNCTION_TEST_PARAM(ENUM, type);
@@ -220,13 +220,19 @@ strNewEncode(EncodeType type, const Buffer *buffer)
     String *this = strNewFixed(encodeToStrSize(type, bufUsed(buffer)));
 
     // Encode buffer
-    encodeToStr(type, bufPtrConst(buffer), bufUsed(buffer), this->pub.buffer);
+    if (bufUsed(buffer) > 0)
+    {
+        encodeToStr(type, bufPtrConst(buffer), bufUsed(buffer), this->pub.buffer);
+    }
+    // Else zero-terminate
+    else
+        this->pub.buffer[0] = '\0';
 
     FUNCTION_TEST_RETURN(STRING, this);
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strNewFmt(const char *format, ...)
 {
     FUNCTION_TEST_BEGIN();
@@ -250,7 +256,7 @@ strNewFmt(const char *format, ...)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strNewZN(const char *string, size_t size)
 {
     FUNCTION_TEST_BEGIN();
@@ -264,14 +270,14 @@ strNewZN(const char *string, size_t size)
     String *this = strNewFixed(size);
 
     // Assign string
-    strncpy(this->pub.buffer, string, strSize(this));
+    memcpy(this->pub.buffer, string, strSize(this));
     this->pub.buffer[strSize(this)] = 0;
 
     FUNCTION_TEST_RETURN(STRING, this);
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strBase(const String *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -283,7 +289,7 @@ strBase(const String *this)
     FUNCTION_TEST_RETURN(STRING, strNewZ(strBaseZ(this)));
 }
 
-const char *
+FN_EXTERN const char *
 strBaseZ(const String *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -301,7 +307,7 @@ strBaseZ(const String *this)
 }
 
 /**********************************************************************************************************************************/
-bool
+FN_EXTERN bool
 strBeginsWith(const String *this, const String *beginsWith)
 {
     FUNCTION_TEST_BEGIN();
@@ -315,7 +321,7 @@ strBeginsWith(const String *this, const String *beginsWith)
     FUNCTION_TEST_RETURN(BOOL, strBeginsWithZ(this, strZ(beginsWith)));
 }
 
-bool
+FN_EXTERN bool
 strBeginsWithZ(const String *this, const char *beginsWith)
 {
     FUNCTION_TEST_BEGIN();
@@ -375,7 +381,7 @@ strResize(String *this, size_t requested)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strCat(String *this, const String *cat)
 {
     FUNCTION_TEST_BEGIN();
@@ -389,7 +395,7 @@ strCat(String *this, const String *cat)
     FUNCTION_TEST_RETURN(STRING, strCatZN(this, strZ(cat), strSize(cat)));
 }
 
-String *
+FN_EXTERN String *
 strCatZ(String *this, const char *cat)
 {
     FUNCTION_TEST_BEGIN();
@@ -417,7 +423,7 @@ strCatZ(String *this, const char *cat)
     FUNCTION_TEST_RETURN(STRING, this);
 }
 
-String *
+FN_EXTERN String *
 strCatZN(String *this, const char *cat, size_t size)
 {
     FUNCTION_TEST_BEGIN();
@@ -436,7 +442,7 @@ strCatZN(String *this, const char *cat, size_t size)
         strResize(this, size);
 
         // Append the string
-        strncpy(this->pub.buffer + strSize(this), cat, size);
+        memcpy(this->pub.buffer + strSize(this), cat, size);
         this->pub.buffer[strSize(this) + size] = '\0';
 
         // Update size/extra
@@ -448,7 +454,7 @@ strCatZN(String *this, const char *cat, size_t size)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strCatBuf(String *const this, const Buffer *const buffer)
 {
     FUNCTION_TEST_BEGIN();
@@ -463,7 +469,7 @@ strCatBuf(String *const this, const Buffer *const buffer)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strCatChr(String *this, char cat)
 {
     FUNCTION_TEST_BEGIN();
@@ -486,8 +492,8 @@ strCatChr(String *this, char cat)
 }
 
 /**********************************************************************************************************************************/
-String *
-strCatEncode(String *this, EncodeType type, const Buffer *buffer)
+FN_EXTERN String *
+strCatEncode(String *const this, const EncodingType type, const Buffer *const buffer)
 {
     FUNCTION_TEST_BEGIN();
         FUNCTION_TEST_PARAM(STRING, this);
@@ -517,7 +523,7 @@ strCatEncode(String *this, EncodeType type, const Buffer *buffer)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strCatFmt(String *this, const char *format, ...)
 {
     FUNCTION_TEST_BEGIN();
@@ -552,7 +558,7 @@ strCatFmt(String *this, const char *format, ...)
 }
 
 /**********************************************************************************************************************************/
-int
+FN_EXTERN int
 strCmp(const String *this, const String *compare)
 {
     FUNCTION_TEST_BEGIN();
@@ -573,7 +579,7 @@ strCmp(const String *this, const String *compare)
     FUNCTION_TEST_RETURN(INT, 1);
 }
 
-int
+FN_EXTERN int
 strCmpZ(const String *this, const char *compare)
 {
     FUNCTION_TEST_BEGIN();
@@ -585,7 +591,7 @@ strCmpZ(const String *this, const char *compare)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strDup(const String *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -601,7 +607,7 @@ strDup(const String *this)
 }
 
 /**********************************************************************************************************************************/
-bool
+FN_EXTERN bool
 strEmpty(const String *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -612,7 +618,7 @@ strEmpty(const String *this)
 }
 
 /**********************************************************************************************************************************/
-bool
+FN_EXTERN bool
 strEndsWith(const String *this, const String *endsWith)
 {
     FUNCTION_TEST_BEGIN();
@@ -626,7 +632,7 @@ strEndsWith(const String *this, const String *endsWith)
     FUNCTION_TEST_RETURN(BOOL, strEndsWithZ(this, strZ(endsWith)));
 }
 
-bool
+FN_EXTERN bool
 strEndsWithZ(const String *this, const char *endsWith)
 {
     FUNCTION_TEST_BEGIN();
@@ -650,7 +656,7 @@ strEndsWithZ(const String *this, const char *endsWith)
 There are two separate implementations because string objects can get the size very efficiently whereas the zero-terminated strings
 would need a call to strlen().
 ***********************************************************************************************************************************/
-bool
+FN_EXTERN bool
 strEq(const String *this, const String *compare)
 {
     FUNCTION_TEST_BEGIN();
@@ -671,7 +677,7 @@ strEq(const String *this, const String *compare)
     FUNCTION_TEST_RETURN(BOOL, result);
 }
 
-bool
+FN_EXTERN bool
 strEqZ(const String *this, const char *compare)
 {
     FUNCTION_TEST_BEGIN();
@@ -686,7 +692,7 @@ strEqZ(const String *this, const char *compare)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strFirstUpper(String *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -702,7 +708,7 @@ strFirstUpper(String *this)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strFirstLower(String *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -718,23 +724,7 @@ strFirstLower(String *this)
 }
 
 /**********************************************************************************************************************************/
-String *
-strUpper(String *this)
-{
-    FUNCTION_TEST_BEGIN();
-        FUNCTION_TEST_PARAM(STRING, this);
-    FUNCTION_TEST_END();
-
-    ASSERT(this != NULL);
-
-    for (size_t idx = 0; idx < strSize(this); idx++)
-        this->pub.buffer[idx] = (char)toupper(this->pub.buffer[idx]);
-
-    FUNCTION_TEST_RETURN(STRING, this);
-}
-
-/**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strLower(String *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -750,7 +740,7 @@ strLower(String *this)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strPath(const String *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -772,7 +762,7 @@ strPath(const String *this)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strPathAbsolute(const String *this, const String *base)
 {
     FUNCTION_TEST_BEGIN();
@@ -856,7 +846,7 @@ strPathAbsolute(const String *this, const String *base)
 }
 
 /**********************************************************************************************************************************/
-const char *
+FN_EXTERN const char *
 strZNull(const String *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -867,36 +857,7 @@ strZNull(const String *this)
 }
 
 /**********************************************************************************************************************************/
-String *
-strQuote(const String *this, const String *quote)
-{
-    FUNCTION_TEST_BEGIN();
-        FUNCTION_TEST_PARAM(STRING, this);
-        FUNCTION_TEST_PARAM(STRING, quote);
-    FUNCTION_TEST_END();
-
-    ASSERT(this != NULL);
-    ASSERT(quote != NULL);
-
-    FUNCTION_TEST_RETURN(STRING, strQuoteZ(this, strZ(quote)));
-}
-
-String *
-strQuoteZ(const String *this, const char *quote)
-{
-    FUNCTION_TEST_BEGIN();
-        FUNCTION_TEST_PARAM(STRING, this);
-        FUNCTION_TEST_PARAM(STRINGZ, quote);
-    FUNCTION_TEST_END();
-
-    ASSERT(this != NULL);
-    ASSERT(quote != NULL);
-
-    FUNCTION_TEST_RETURN(STRING, strNewFmt("%s%s%s", quote, strZ(this), quote));
-}
-
-/**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strReplaceChr(String *this, char find, char replace)
 {
     FUNCTION_TEST_BEGIN();
@@ -917,50 +878,7 @@ strReplaceChr(String *this, char find, char replace)
 }
 
 /**********************************************************************************************************************************/
-String *
-strReplace(String *const this, const String *const replace, const String *const with)
-{
-    FUNCTION_TEST_BEGIN();
-        FUNCTION_TEST_PARAM(STRING, this);
-        FUNCTION_TEST_PARAM(STRING, replace);
-        FUNCTION_TEST_PARAM(STRING, with);
-    FUNCTION_TEST_END();
-
-    MEM_CONTEXT_TEMP_BEGIN()
-    {
-        // Does replace exist?
-        char *found = strstr(this->pub.buffer, strZ(replace));
-
-        while (found != NULL)
-        {
-            // Offset into string
-            const size_t offset = (size_t)(found - this->pub.buffer);
-
-            // Calculate new size and resize
-            const size_t size = strSize(this) - strSize(replace) + strSize(with);
-            strResize(this, size);
-
-            // Replace
-            memmove(
-                this->pub.buffer + offset + strSize(with), this->pub.buffer + offset + strSize(replace),
-                strSize(this) - offset - strSize(replace));
-            memcpy(this->pub.buffer + offset, strZ(with), strSize(with));
-
-            // Set new size and zero-terminate
-            this->pub.size = (unsigned int)size;
-            this->pub.buffer[size] = '\0';
-
-            // Does replace exist again?
-            found = strstr(this->pub.buffer + offset + strSize(with), strZ(replace));
-        }
-    }
-    MEM_CONTEXT_TEMP_END();
-
-    FUNCTION_TEST_RETURN(STRING, this);
-}
-
-/**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strSub(const String *this, size_t start)
 {
     FUNCTION_TEST_BEGIN();
@@ -975,7 +893,7 @@ strSub(const String *this, size_t start)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strSubN(const String *this, size_t start, size_t size)
 {
     FUNCTION_TEST_BEGIN();
@@ -992,7 +910,7 @@ strSubN(const String *this, size_t start, size_t size)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strTrim(String *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -1035,7 +953,7 @@ strTrim(String *this)
 }
 
 /**********************************************************************************************************************************/
-int
+FN_EXTERN int
 strChr(const String *this, char chr)
 {
     FUNCTION_TEST_BEGIN();
@@ -1059,7 +977,7 @@ strChr(const String *this, char chr)
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strTruncIdx(String *this, int idx)
 {
     FUNCTION_TEST_BEGIN();
@@ -1080,31 +998,15 @@ strTruncIdx(String *this, int idx)
     FUNCTION_TEST_RETURN(STRING, this);
 }
 
-/***********************************************************************************************************************************
-Convert an object to a zero-terminated string for logging
-***********************************************************************************************************************************/
-size_t strObjToLog(const void *object, StrObjToLogFormat formatFunc, char *buffer, size_t bufferSize)
+/**********************************************************************************************************************************/
+FN_EXTERN void
+strToLog(const String *const this, StringStatic *const debugLog)
 {
-    size_t result = 0;
-
-    MEM_CONTEXT_TEMP_BEGIN()
-    {
-        result = (size_t)snprintf(buffer, bufferSize, "%s", object == NULL ? NULL_Z : strZ(formatFunc(object)));
-    }
-    MEM_CONTEXT_TEMP_END();
-
-    return result;
+    strStcFmt(debugLog, "{\"%s\"}", strZ(this));
 }
 
 /**********************************************************************************************************************************/
-String *
-strToLog(const String *this)
-{
-    return this == NULL ? strDup(NULL_STR) : strNewFmt("{\"%s\"}", strZ(this));
-}
-
-/**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 strSizeFormat(const uint64_t size)
 {
     FUNCTION_TEST_BEGIN();

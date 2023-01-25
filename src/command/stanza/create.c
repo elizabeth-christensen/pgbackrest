@@ -24,7 +24,7 @@ Stanza Create Command
 #include "storage/helper.h"
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 cmdStanzaCreate(void)
 {
     FUNCTION_LOG_VOID(logLevelDebug);

@@ -959,7 +959,7 @@ removeExpiredHistory(InfoBackup *infoBackup, unsigned int repoIdx)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 cmdExpire(void)
 {
     FUNCTION_LOG_VOID(logLevelDebug);

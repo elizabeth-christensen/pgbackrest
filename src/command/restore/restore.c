@@ -197,7 +197,7 @@ typedef struct RestoreBackupData
 #define FUNCTION_LOG_RESTORE_BACKUP_DATA_TYPE                                                                                      \
     RestoreBackupData
 #define FUNCTION_LOG_RESTORE_BACKUP_DATA_FORMAT(value, buffer, bufferSize)                                                         \
-    objToLog(&value, "RestoreBackupData", buffer, bufferSize)
+    objNameToLog(&value, "RestoreBackupData", buffer, bufferSize)
 
 // Helper function for restoreBackupSet
 static RestoreBackupData
@@ -223,6 +223,8 @@ static RestoreBackupData
 restoreBackupSet(void)
 {
     FUNCTION_LOG_VOID(logLevelDebug);
+
+    FUNCTION_AUDIT_STRUCT();
 
     RestoreBackupData result = {0};
 
@@ -340,6 +342,19 @@ restoreBackupSet(void)
                 // Else use backup set found
                 else
                 {
+                    // Is this backup part of the latest pg history?
+                    InfoPgData backupInfoPg = infoPgData(infoBackupPg(infoBackup), infoPgDataCurrentId(infoBackupPg(infoBackup)));
+
+                    if (latestBackup.backupPgId < backupInfoPg.id)
+                    {
+                        THROW_FMT(BackupSetInvalidError,
+                            "the latest backup set found '%s' is from a prior version of " PG_NAME "\n"
+                            "HINT: was a backup created after the stanza-upgrade?\n"
+                            "HINT: specify --" CFGOPT_SET " or --" CFGOPT_TYPE "=time/lsn to restore from a prior version of "
+                                PG_NAME ".",
+                            strZ(latestBackup.backupLabel));
+                    }
+
                     result = restoreBackupData(latestBackup.backupLabel, repoIdx, infoPgCipherPass(infoBackupPg(infoBackup)));
                     break;
                 }
@@ -525,10 +540,6 @@ restoreManifestMap(Manifest *manifest)
                         THROW_FMT(TablespaceMapError, "unable to remap invalid tablespace '%s'", strZ(tablespace));
                 }
             }
-
-            // Issue a warning message when remapping tablespaces in PostgreSQL < 9.2
-            if (manifestData(manifest)->pgVersion <= PG_VERSION_92)
-                LOG_WARN("update pg_tablespace.spclocation with new tablespace locations for PostgreSQL <= " PG_VERSION_92_STR);
         }
 
         // Remap links
@@ -731,6 +742,8 @@ restoreManifestOwner(const Manifest *const manifest, const String **const rootRe
         FUNCTION_LOG_PARAM_P(VOID, rootReplaceUser);
         FUNCTION_LOG_PARAM_P(VOID, rootReplaceGroup);
     FUNCTION_LOG_END();
+
+    FUNCTION_AUDIT_HELPER();
 
     ASSERT(manifest != NULL);
 
@@ -1630,8 +1643,8 @@ restoreRecoveryOption(unsigned int pgVersion)
                 {
                     kvPut(result, VARSTRZ(RECOVERY_TARGET_ACTION), VARSTR(strIdToStr(targetAction)));
                 }
-                // Write pause_at_recovery_target on supported PostgreSQL versions
-                else if (pgVersion >= PG_VERSION_RECOVERY_TARGET_PAUSE)
+                // Else write pause_at_recovery_target on supported PostgreSQL versions
+                else
                 {
                     // Shutdown action is not supported with pause_at_recovery_target setting
                     if (targetAction == CFGOPTVAL_TARGET_ACTION_SHUTDOWN)
@@ -1643,13 +1656,6 @@ restoreRecoveryOption(unsigned int pgVersion)
                     }
 
                     kvPut(result, VARSTRZ(PAUSE_AT_RECOVERY_TARGET), VARSTR(FALSE_STR));
-                }
-                // Else error on unsupported version
-                else
-                {
-                    THROW_FMT(
-                        OptionInvalidError, CFGOPT_TARGET_ACTION " option is only available in PostgreSQL >= %s",
-                        strZ(pgVersionToStr(PG_VERSION_RECOVERY_TARGET_PAUSE)));
                 }
             }
         }
@@ -2007,6 +2013,8 @@ restoreProcessQueue(Manifest *manifest, List **queueList)
         FUNCTION_LOG_PARAM_P(LIST, queueList);
     FUNCTION_LOG_END();
 
+    FUNCTION_AUDIT_HELPER();
+
     ASSERT(manifest != NULL);
 
     uint64_t result = 0;
@@ -2207,7 +2215,7 @@ restoreJobResult(const Manifest *manifest, ProtocolParallelJob *job, RegExp *zer
 
                 // If not zero-length add the checksum
                 if (file.size != 0 && !zeroed)
-                    strCatFmt(log, " checksum %s", file.checksumSha1);
+                    strCatFmt(log, " checksum %s", strZ(strNewEncode(encodingHex, BUF(file.checksumSha1, HASH_TYPE_SHA1_SIZE))));
 
                 LOG_DETAIL_PID(protocolParallelJobProcessId(job), strZ(log));
             }
@@ -2318,19 +2326,21 @@ static ProtocolParallelJob *restoreJobCallback(void *data, unsigned int clientId
                         backupFileRepoPathP(
                             file.reference != NULL ? file.reference : manifestData(jobData->manifest)->backupLabel,
                             .manifestName = file.name, .bundleId = file.bundleId,
-                            .compressType = manifestData(jobData->manifest)->backupOptionCompressType));
+                            .compressType = manifestData(jobData->manifest)->backupOptionCompressType,
+                            .blockIncr = file.blockIncrMapSize != 0));
                     pckWriteU32P(param, jobData->repoIdx);
                     pckWriteU32P(param, manifestData(jobData->manifest)->backupOptionCompressType);
                     pckWriteTimeP(param, manifestData(jobData->manifest)->backupTimestampCopyStart);
                     pckWriteBoolP(param, cfgOptionBool(cfgOptDelta));
                     pckWriteBoolP(param, cfgOptionBool(cfgOptDelta) && cfgOptionBool(cfgOptForce));
                     pckWriteStrP(param, jobData->cipherSubPass);
+                    pckWriteStrLstP(param, manifestReferenceList(jobData->manifest));
 
                     fileAdded = true;
                 }
 
                 pckWriteStrP(param, restoreFilePgPath(jobData->manifest, file.name));
-                pckWriteStrP(param, STR(file.checksumSha1));
+                pckWriteBinP(param, BUF(file.checksumSha1, HASH_TYPE_SHA1_SIZE));
                 pckWriteU64P(param, file.size);
                 pckWriteTimeP(param, file.timestamp);
                 pckWriteModeP(param, file.mode);
@@ -2338,14 +2348,29 @@ static ProtocolParallelJob *restoreJobCallback(void *data, unsigned int clientId
                 pckWriteStrP(param, restoreManifestOwnerReplace(file.user, jobData->rootReplaceUser));
                 pckWriteStrP(param, restoreManifestOwnerReplace(file.group, jobData->rootReplaceGroup));
 
-                if (file.bundleId != 0)
+                // If block incremental then modify offset and size to where the map is stored since we need to read that first.
+                if (file.blockIncrMapSize != 0)
+                {
+                    pckWriteBoolP(param, true);
+                    pckWriteU64P(param, file.bundleOffset + file.sizeRepo - file.blockIncrMapSize);
+                    pckWriteU64P(param, file.blockIncrMapSize);
+                }
+                // Else write bundle offset/size
+                else if (file.bundleId != 0)
                 {
                     pckWriteBoolP(param, true);
                     pckWriteU64P(param, file.bundleOffset);
                     pckWriteU64P(param, file.sizeRepo);
                 }
+                // Else restore as a whole file
                 else
                     pckWriteBoolP(param, false);
+
+                // Block incremental
+                pckWriteU64P(param, file.blockIncrMapSize);
+
+                if (file.blockIncrMapSize != 0)
+                    pckWriteU64P(param, file.blockIncrSize);
 
                 pckWriteStrP(param, file.name);
 
@@ -2379,7 +2404,7 @@ static ProtocolParallelJob *restoreJobCallback(void *data, unsigned int clientId
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 cmdRestore(void)
 {
     FUNCTION_LOG_VOID(logLevelDebug);

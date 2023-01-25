@@ -52,6 +52,7 @@ struct MemContext
 {
 #ifdef DEBUG
     const char *name;                                               // Indicates what the context is being used for
+    uint64_t sequenceNew;                                           // Sequence when this context was created (used for audit)
     bool active:1;                                                  // Is the context currently active?
 #endif
     MemQty childQty:2;                                              // How many child contexts can this context have?
@@ -229,6 +230,165 @@ static unsigned int memContextCurrentStackIdx = 0;
 static unsigned int memContextMaxStackIdx = 0;
 
 /***********************************************************************************************************************************
+***********************************************************************************************************************************/
+#ifdef DEBUG
+
+static uint64_t memContextSequence = 0;
+
+FN_EXTERN void
+memContextAuditBegin(MemContextAuditState *const state)
+{
+    FUNCTION_TEST_BEGIN();
+        FUNCTION_TEST_PARAM_P(VOID, state);
+    FUNCTION_TEST_END();
+
+    ASSERT(state != NULL);
+    ASSERT(state->memContext != NULL);
+    ASSERT(state->memContext == memContextTop() || state->memContext->sequenceNew != 0);
+
+    if (state->memContext->childInitialized)
+    {
+        ASSERT(state->memContext->childQty != memQtyNone);
+
+        if (state->memContext->childQty == memQtyOne)
+        {
+            MemContextChildOne *const memContextChild = memContextChildOne(state->memContext);
+
+            if (memContextChild->context != NULL)
+                state->sequenceContextNew = memContextChild->context->sequenceNew;
+        }
+        else
+        {
+            ASSERT(state->memContext->childQty == memQtyMany);
+            MemContextChildMany *const memContextChild = memContextChildMany(state->memContext);
+
+            for (unsigned int contextIdx = 0; contextIdx < memContextChild->listSize; contextIdx++)
+            {
+                if (memContextChild->list[contextIdx] != NULL &&
+                    memContextChild->list[contextIdx]->sequenceNew > state->sequenceContextNew)
+                {
+                    state->sequenceContextNew = memContextChild->list[contextIdx]->sequenceNew;
+                }
+            }
+        }
+    }
+
+    FUNCTION_TEST_RETURN_VOID();
+}
+
+static bool
+memContextAuditNameMatch(const char *const actual, const char *const expected)
+{
+    FUNCTION_TEST_BEGIN();
+        FUNCTION_TEST_PARAM(STRINGZ, actual);
+        FUNCTION_TEST_PARAM(STRINGZ, expected);
+    FUNCTION_TEST_END();
+
+    ASSERT(actual != NULL);
+    ASSERT(expected != NULL);
+
+    unsigned int actualIdx = 0;
+
+    while (actual[actualIdx] != '\0' && actual[actualIdx] == expected[actualIdx])
+        actualIdx++;
+
+    FUNCTION_TEST_RETURN(
+        BOOL,
+        (actual[actualIdx] == '\0' || strncmp(actual + actualIdx, "::", 2) == 0) &&
+        (expected[actualIdx] == '\0' || strcmp(expected + actualIdx, " *") == 0));
+}
+
+FN_EXTERN void
+memContextAuditEnd(const MemContextAuditState *const state, const char *const returnType)
+{
+    FUNCTION_TEST_BEGIN();
+        FUNCTION_TEST_PARAM_P(VOID, state);
+        FUNCTION_TEST_PARAM(STRINGZ, returnType);
+    FUNCTION_TEST_END();
+
+    if (state->returnTypeAny)
+        FUNCTION_TEST_RETURN_VOID();
+
+    if (state->memContext->childInitialized)
+    {
+        ASSERT(state->memContext->childQty != memQtyNone);
+
+        const char *returnTypeInvalid = NULL;
+        const char *returnTypeFound = NULL;
+
+        if (state->memContext->childQty == memQtyOne)
+        {
+            MemContextChildOne *const memContextChild = memContextChildOne(state->memContext);
+
+            if (memContextChild->context != NULL && memContextChild->context->sequenceNew > state->sequenceContextNew &&
+                !memContextAuditNameMatch(memContextChild->context->name, returnType))
+            {
+                returnTypeInvalid = memContextChild->context->name;
+            }
+        }
+        else
+        {
+            ASSERT(state->memContext->childQty == memQtyMany);
+            MemContextChildMany *const memContextChild = memContextChildMany(state->memContext);
+
+            for (unsigned int contextIdx = 0; contextIdx < memContextChild->listSize; contextIdx++)
+            {
+                if (memContextChild->list[contextIdx] != NULL &&
+                    memContextChild->list[contextIdx]->sequenceNew > state->sequenceContextNew)
+                {
+                    if (memContextAuditNameMatch(memContextChild->list[contextIdx]->name, returnType))
+                    {
+                        if (returnTypeFound != NULL)
+                        {
+                            returnTypeInvalid = memContextChild->list[contextIdx]->name;
+                            break;
+                        }
+
+                        returnTypeFound = memContextChild->list[contextIdx]->name;
+                    }
+                    else
+                    {
+                        returnTypeInvalid = memContextChild->list[contextIdx]->name;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (returnTypeInvalid != NULL)
+        {
+            if (returnTypeFound != NULL)
+            {
+                THROW_FMT(
+                    AssertError, "expected return type '%s' already found but also found '%s'", returnTypeFound, returnTypeInvalid);
+            }
+            else
+            {
+                THROW_FMT(
+                    AssertError, "expected return type '%s' but found '%s'", returnType, returnTypeInvalid);
+            }
+        }
+    }
+
+    FUNCTION_TEST_RETURN_VOID();
+}
+
+FN_EXTERN void *
+memContextAuditAllocExtraName(void *const allocExtra, const char *const name)
+{
+    FUNCTION_TEST_BEGIN();
+        FUNCTION_TEST_PARAM_P(VOID, allocExtra);
+        FUNCTION_TEST_PARAM(STRINGZ, name);
+    FUNCTION_TEST_END();
+
+    memContextFromAllocExtra(allocExtra)->name = name;
+
+    FUNCTION_TEST_RETURN_P(VOID, allocExtra);
+}
+
+#endif
+
+/***********************************************************************************************************************************
 Wrapper around malloc() with error handling
 ***********************************************************************************************************************************/
 static void *
@@ -386,7 +546,7 @@ memContextNewIndex(MemContext *const memContext, MemContextChildMany *const memC
 }
 
 /**********************************************************************************************************************************/
-MemContext *
+FN_EXTERN MemContext *
 memContextNew(
 #ifdef DEBUG
     const char *const name,
@@ -431,6 +591,9 @@ memContextNew(
 #ifdef DEBUG
         // Set the context name
         .name = name,
+
+        // Set audit sequence
+        .sequenceNew = ++memContextSequence,
 
         // Set new context active
         .active = true,
@@ -482,7 +645,7 @@ memContextNew(
 }
 
 /**********************************************************************************************************************************/
-void *
+FN_EXTERN void *
 memContextAllocExtra(MemContext *const this)
 {
     FUNCTION_TEST_BEGIN();
@@ -496,7 +659,7 @@ memContextAllocExtra(MemContext *const this)
 }
 
 /**********************************************************************************************************************************/
-MemContext *
+FN_EXTERN MemContext *
 memContextFromAllocExtra(void *const allocExtra)
 {
     FUNCTION_TEST_BEGIN();
@@ -509,21 +672,8 @@ memContextFromAllocExtra(void *const allocExtra)
     FUNCTION_TEST_RETURN(MEM_CONTEXT, (MemContext *)allocExtra - 1);
 }
 
-const MemContext *
-memContextConstFromAllocExtra(const void *const allocExtra)
-{
-    FUNCTION_TEST_BEGIN();
-        FUNCTION_TEST_PARAM_P(VOID, allocExtra);
-    FUNCTION_TEST_END();
-
-    ASSERT(allocExtra != NULL);
-    ASSERT(((MemContext *)allocExtra - 1)->allocExtra != 0);
-
-    FUNCTION_TEST_RETURN(MEM_CONTEXT, (MemContext *)allocExtra - 1);
-}
-
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 memContextCallbackSet(MemContext *this, void (*callbackFunction)(void *), void *callbackArgument)
 {
     FUNCTION_TEST_BEGIN();
@@ -552,7 +702,7 @@ memContextCallbackSet(MemContext *this, void (*callbackFunction)(void *), void *
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 memContextCallbackClear(MemContext *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -686,7 +836,7 @@ memContextAllocResize(MemContextAlloc *alloc, size_t size)
 }
 
 /**********************************************************************************************************************************/
-void *
+FN_EXTERN void *
 memNew(size_t size)
 {
     FUNCTION_TEST_BEGIN();
@@ -699,7 +849,7 @@ memNew(size_t size)
 }
 
 /**********************************************************************************************************************************/
-void *
+FN_EXTERN void *
 memNewPtrArray(size_t size)
 {
     FUNCTION_TEST_BEGIN();
@@ -717,7 +867,7 @@ memNewPtrArray(size_t size)
 }
 
 /**********************************************************************************************************************************/
-void *
+FN_EXTERN void *
 memResize(const void *buffer, size_t size)
 {
     FUNCTION_TEST_BEGIN();
@@ -729,7 +879,7 @@ memResize(const void *buffer, size_t size)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 memFree(void *const buffer)
 {
     FUNCTION_TEST_BEGIN();
@@ -770,7 +920,7 @@ memFree(void *const buffer)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 memContextMove(MemContext *this, MemContext *parentNew)
 {
     FUNCTION_TEST_BEGIN();
@@ -831,7 +981,7 @@ memContextMove(MemContext *this, MemContext *parentNew)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 memContextSwitch(MemContext *this)
 {
     FUNCTION_TEST_BEGIN();
@@ -857,7 +1007,7 @@ memContextSwitch(MemContext *this)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 memContextSwitchBack(void)
 {
     FUNCTION_TEST_VOID();
@@ -888,7 +1038,7 @@ memContextSwitchBack(void)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 memContextKeep(void)
 {
     FUNCTION_TEST_VOID();
@@ -909,7 +1059,7 @@ memContextKeep(void)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 memContextDiscard(void)
 {
     FUNCTION_TEST_VOID();
@@ -931,7 +1081,7 @@ memContextDiscard(void)
 }
 
 /**********************************************************************************************************************************/
-MemContext *
+FN_EXTERN MemContext *
 memContextTop(void)
 {
     FUNCTION_TEST_VOID();
@@ -939,7 +1089,7 @@ memContextTop(void)
 }
 
 /**********************************************************************************************************************************/
-MemContext *
+FN_EXTERN MemContext *
 memContextCurrent(void)
 {
     FUNCTION_TEST_VOID();
@@ -947,7 +1097,7 @@ memContextCurrent(void)
 }
 
 /**********************************************************************************************************************************/
-MemContext *
+FN_EXTERN MemContext *
 memContextPrior(void)
 {
     FUNCTION_TEST_VOID();
@@ -963,7 +1113,9 @@ memContextPrior(void)
 }
 
 /**********************************************************************************************************************************/
-size_t
+#ifdef DEBUG
+
+FN_EXTERN size_t
 memContextSize(const MemContext *const this)
 {
     FUNCTION_TEST_BEGIN();
@@ -1046,8 +1198,10 @@ memContextSize(const MemContext *const this)
     FUNCTION_TEST_RETURN(SIZE, (size_t)(offset - (unsigned char *)this) + total);
 }
 
+#endif // DEBUG
+
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 memContextClean(const unsigned int tryDepth, const bool fatal)
 {
     FUNCTION_TEST_BEGIN();
@@ -1237,7 +1391,7 @@ memContextFreeRecurse(MemContext *const this)
     FUNCTION_TEST_RETURN_VOID();
 }
 
-void
+FN_EXTERN void
 memContextFree(MemContext *const this)
 {
     FUNCTION_TEST_BEGIN();

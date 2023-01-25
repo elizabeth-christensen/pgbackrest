@@ -47,6 +47,8 @@ infoBackupNewInternal(void)
 {
     FUNCTION_TEST_VOID();
 
+    FUNCTION_AUDIT_HELPER();
+
     InfoBackup *this = OBJ_NEW_ALLOC();
 
     *this = (InfoBackup)
@@ -62,7 +64,7 @@ infoBackupNewInternal(void)
 }
 
 /**********************************************************************************************************************************/
-InfoBackup *
+FN_EXTERN InfoBackup *
 infoBackupNew(unsigned int pgVersion, uint64_t pgSystemId, unsigned int pgCatalogVersion, const String *cipherPassSub)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -100,6 +102,8 @@ Create new object and load contents from a file
 #define INFO_BACKUP_KEY_BACKUP_ARCHIVE_STOP                         "backup-archive-stop"
 #define INFO_BACKUP_KEY_BACKUP_INFO_REPO_SIZE                       "backup-info-repo-size"
 #define INFO_BACKUP_KEY_BACKUP_INFO_REPO_SIZE_DELTA                 "backup-info-repo-size-delta"
+#define INFO_BACKUP_KEY_BACKUP_INFO_REPO_SIZE_MAP                   "backup-info-repo-size-map"
+#define INFO_BACKUP_KEY_BACKUP_INFO_REPO_SIZE_MAP_DELTA             "backup-info-repo-size-map-delta"
 #define INFO_BACKUP_KEY_BACKUP_INFO_SIZE                            "backup-info-size"
 #define INFO_BACKUP_KEY_BACKUP_INFO_SIZE_DELTA                      "backup-info-size-delta"
 #define INFO_BACKUP_KEY_BACKUP_LSN_START                            "backup-lsn-start"
@@ -171,6 +175,14 @@ infoBackupLoadCallback(void *data, const String *section, const String *key, con
             // Size info
             info.backupInfoRepoSize = jsonReadUInt64(jsonReadKeyRequireZ(json, INFO_BACKUP_KEY_BACKUP_INFO_REPO_SIZE));
             info.backupInfoRepoSizeDelta = jsonReadUInt64(jsonReadKeyRequireZ(json, INFO_BACKUP_KEY_BACKUP_INFO_REPO_SIZE_DELTA));
+
+            if (jsonReadKeyExpectZ(json, INFO_BACKUP_KEY_BACKUP_INFO_REPO_SIZE_MAP))
+            {
+                info.backupInfoRepoSizeMap = varNewUInt64(jsonReadUInt64(json));
+                info.backupInfoRepoSizeMapDelta = varNewUInt64(
+                    jsonReadUInt64(jsonReadKeyRequireZ(json, INFO_BACKUP_KEY_BACKUP_INFO_REPO_SIZE_MAP_DELTA)));
+            }
+
             info.backupInfoSize = jsonReadUInt64(jsonReadKeyRequireZ(json, INFO_BACKUP_KEY_BACKUP_INFO_SIZE));
             info.backupInfoSizeDelta = jsonReadUInt64(jsonReadKeyRequireZ(json, INFO_BACKUP_KEY_BACKUP_INFO_SIZE_DELTA));
 
@@ -200,7 +212,7 @@ infoBackupLoadCallback(void *data, const String *section, const String *key, con
             // Database id
             info.backupPgId = jsonReadUInt(jsonReadKeyRequireZ(json, INFO_KEY_DB_ID));
 
-                // Options
+            // Options
             info.optionArchiveCheck = jsonReadBool(jsonReadKeyRequireZ(json, INFO_BACKUP_KEY_OPT_ARCHIVE_CHECK));
             info.optionArchiveCopy = jsonReadBool(jsonReadKeyRequireZ(json, INFO_BACKUP_KEY_OPT_ARCHIVE_COPY));
             info.optionBackupStandby = jsonReadBool(jsonReadKeyRequireZ(json, INFO_BACKUP_KEY_OPT_BACKUP_STANDBY));
@@ -219,7 +231,7 @@ infoBackupLoadCallback(void *data, const String *section, const String *key, con
 }
 
 /**********************************************************************************************************************************/
-InfoBackup *
+FN_EXTERN InfoBackup *
 infoBackupNewLoad(IoRead *read)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -252,6 +264,8 @@ infoBackupSaveCallback(void *const data, const String *const sectionNext, InfoSa
         FUNCTION_TEST_PARAM(INFO_SAVE, infoSaveData);
     FUNCTION_TEST_END();
 
+    FUNCTION_AUDIT_CALLBACK();
+
     ASSERT(data != NULL);
     ASSERT(infoSaveData != NULL);
 
@@ -281,6 +295,20 @@ infoBackupSaveCallback(void *const data, const String *const sectionNext, InfoSa
 
             jsonWriteUInt64(jsonWriteKeyZ(json, INFO_BACKUP_KEY_BACKUP_INFO_REPO_SIZE), backupData.backupInfoRepoSize);
             jsonWriteUInt64(jsonWriteKeyZ(json, INFO_BACKUP_KEY_BACKUP_INFO_REPO_SIZE_DELTA), backupData.backupInfoRepoSizeDelta);
+
+            ASSERT(
+                (backupData.backupInfoRepoSizeMap != NULL && backupData.backupInfoRepoSizeMap != NULL) ||
+                (backupData.backupInfoRepoSizeMap == NULL && backupData.backupInfoRepoSizeMap == NULL));
+
+            if (backupData.backupInfoRepoSizeMap != NULL)
+            {
+                jsonWriteUInt64(
+                    jsonWriteKeyZ(json, INFO_BACKUP_KEY_BACKUP_INFO_REPO_SIZE_MAP), varUInt64(backupData.backupInfoRepoSizeMap));
+                jsonWriteUInt64(
+                    jsonWriteKeyZ(json, INFO_BACKUP_KEY_BACKUP_INFO_REPO_SIZE_MAP_DELTA),
+                    varUInt64(backupData.backupInfoRepoSizeMapDelta));
+            }
+
             jsonWriteUInt64(jsonWriteKeyZ(json, INFO_BACKUP_KEY_BACKUP_INFO_SIZE), backupData.backupInfoSize);
             jsonWriteUInt64(jsonWriteKeyZ(json, INFO_BACKUP_KEY_BACKUP_INFO_SIZE_DELTA), backupData.backupInfoSizeDelta);
 
@@ -341,7 +369,7 @@ infoBackupSave(InfoBackup *this, IoWrite *write)
 }
 
 /**********************************************************************************************************************************/
-InfoBackup *
+FN_EXTERN InfoBackup *
 infoBackupPgSet(InfoBackup *this, unsigned int pgVersion, uint64_t pgSystemId, unsigned int pgCatalogVersion)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -357,7 +385,7 @@ infoBackupPgSet(InfoBackup *this, unsigned int pgVersion, uint64_t pgSystemId, u
 }
 
 /**********************************************************************************************************************************/
-InfoBackupData
+FN_EXTERN InfoBackupData
 infoBackupData(const InfoBackup *this, unsigned int backupDataIdx)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
@@ -371,7 +399,7 @@ infoBackupData(const InfoBackup *this, unsigned int backupDataIdx)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 infoBackupDataAdd(const InfoBackup *this, const Manifest *manifest)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
@@ -391,6 +419,8 @@ infoBackupDataAdd(const InfoBackup *this, const Manifest *manifest)
         uint64_t backupSizeDelta = 0;
         uint64_t backupRepoSize = 0;
         uint64_t backupRepoSizeDelta = 0;
+        uint64_t backupRepoSizeMap = 0;
+        uint64_t backupRepoSizeMapDelta = 0;
         bool backupError = false;
 
         for (unsigned int fileIdx = 0; fileIdx < manifestFileTotal(manifest); fileIdx++)
@@ -399,12 +429,14 @@ infoBackupDataAdd(const InfoBackup *this, const Manifest *manifest)
 
             backupSize += file.size;
             backupRepoSize += file.sizeRepo > 0 ? file.sizeRepo : file.size;
+            backupRepoSizeMap += file.blockIncrMapSize;
 
             // If a reference to a file exists, then it is in a previous backup and the delta calculation was already done
             if (file.reference == NULL)
             {
                 backupSizeDelta += file.size;
                 backupRepoSizeDelta += file.sizeRepo > 0 ? file.sizeRepo : file.size;
+                backupRepoSizeMapDelta += file.blockIncrMapSize;
             }
 
             // Is there an error in the file?
@@ -445,6 +477,13 @@ infoBackupDataAdd(const InfoBackup *this, const Manifest *manifest)
                 .optionOnline = manData->backupOptionOnline,
             };
 
+            // Add map sizes when block incr
+            if (manData->blockIncr)
+            {
+                infoBackupData.backupInfoRepoSizeMap = varNewUInt64(backupRepoSizeMap);
+                infoBackupData.backupInfoRepoSizeMapDelta = varNewUInt64(backupRepoSizeMapDelta);
+            }
+
             if (manData->backupType != backupTypeFull)
             {
                 // This list may not be sorted for manifests created before the reference list was added. Remove the last reference
@@ -475,7 +514,7 @@ infoBackupDataAdd(const InfoBackup *this, const Manifest *manifest)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 infoBackupDataAnnotationSet(const InfoBackup *const this, const String *const backupLabel, const KeyValue *const newAnnotationKv)
 {
     FUNCTION_TEST_BEGIN();
@@ -526,7 +565,7 @@ infoBackupDataAnnotationSet(const InfoBackup *const this, const String *const ba
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 infoBackupDataDelete(const InfoBackup *this, const String *backupDeleteLabel)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
@@ -548,7 +587,7 @@ infoBackupDataDelete(const InfoBackup *this, const String *backupDeleteLabel)
 }
 
 /**********************************************************************************************************************************/
-StringList *
+FN_EXTERN StringList *
 infoBackupDataLabelList(const InfoBackup *this, const String *expression)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
@@ -583,7 +622,7 @@ infoBackupDataLabelList(const InfoBackup *this, const String *expression)
 }
 
 /**********************************************************************************************************************************/
-StringList *
+FN_EXTERN StringList *
 infoBackupDataDependentList(const InfoBackup *this, const String *backupLabel)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
@@ -663,7 +702,7 @@ infoBackupLoadFileCallback(void *const data, const unsigned int try)
     FUNCTION_LOG_RETURN(BOOL, result);
 }
 
-InfoBackup *
+FN_EXTERN InfoBackup *
 infoBackupLoadFile(const Storage *storage, const String *fileName, CipherType cipherType, const String *cipherPass)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -713,7 +752,7 @@ infoBackupLoadFile(const Storage *storage, const String *fileName, CipherType ci
 }
 
 /**********************************************************************************************************************************/
-InfoBackup *
+FN_EXTERN InfoBackup *
 infoBackupLoadFileReconstruct(const Storage *storage, const String *fileName, CipherType cipherType, const String *cipherPass)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -815,7 +854,7 @@ infoBackupLoadFileReconstruct(const Storage *storage, const String *fileName, Ci
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 infoBackupSaveFile(
     InfoBackup *infoBackup, const Storage *storage, const String *fileName, CipherType cipherType, const String *cipherPass)
 {
@@ -850,8 +889,8 @@ infoBackupSaveFile(
 }
 
 /**********************************************************************************************************************************/
-String *
-infoBackupDataToLog(const InfoBackupData *this)
+FN_EXTERN void
+infoBackupDataToLog(const InfoBackupData *const this, StringStatic *const debugLog)
 {
-    return strNewFmt("{label: %s, pgId: %u}", strZ(this->backupLabel), this->backupPgId);
+    strStcFmt(debugLog, "{label: %s, pgId: %u}", strZ(this->backupLabel), this->backupPgId);
 }

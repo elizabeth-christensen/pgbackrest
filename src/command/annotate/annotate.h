@@ -8,6 +8,6 @@ Annotate Command
 Functions
 ***********************************************************************************************************************************/
 // Add or modify backup annotations
-void cmdAnnotate(void);
+FN_EXTERN void cmdAnnotate(void);
 
 #endif

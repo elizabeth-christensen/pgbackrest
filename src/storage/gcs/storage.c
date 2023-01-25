@@ -22,7 +22,6 @@ GCS Storage
 #include "common/type/json.h"
 #include "common/type/object.h"
 #include "storage/gcs/read.h"
-#include "storage/gcs/storage.intern.h"
 #include "storage/gcs/write.h"
 #include "storage/posix/storage.h"
 
@@ -119,6 +118,8 @@ storageGcsAuthToken(HttpRequest *const request, const time_t timeBegin)
         FUNCTION_TEST_PARAM(TIME, timeBegin);
     FUNCTION_TEST_END();
 
+    FUNCTION_AUDIT_STRUCT();
+
     StorageGcsAuthTokenResult result = {0};
 
     MEM_CONTEXT_TEMP_BEGIN()
@@ -178,7 +179,7 @@ storageGcsAuthJwt(StorageGcs *this, time_t timeBegin)
     {
         // Add claim
         strCatEncode(
-            result, encodeBase64Url,
+            result, encodingBase64Url,
             BUFSTR(
                 strNewFmt(
                     "{\"iss\":\"%s\",\"scope\":\"https://www.googleapis.com/auth/devstorage.read%s\",\"aud\":\"%s\""
@@ -220,7 +221,7 @@ storageGcsAuthJwt(StorageGcs *this, time_t timeBegin)
 
             // Add dot delimiter and signature
             strCatChr(result, '.');
-            strCatEncode(result, encodeBase64Url, signature);
+            strCatEncode(result, encodingBase64Url, signature);
         }
         FINALLY()
         {
@@ -246,6 +247,8 @@ storageGcsAuthService(StorageGcs *this, time_t timeBegin)
         FUNCTION_TEST_PARAM(STORAGE_GCS, this);
         FUNCTION_TEST_PARAM(TIME, timeBegin);
     FUNCTION_TEST_END();
+
+    FUNCTION_AUDIT_STRUCT();
 
     ASSERT(this != NULL);
     ASSERT(timeBegin > 0);
@@ -289,6 +292,8 @@ storageGcsAuthAuto(StorageGcs *this, time_t timeBegin)
         FUNCTION_TEST_PARAM(STORAGE_GCS, this);
         FUNCTION_TEST_PARAM(TIME, timeBegin);
     FUNCTION_TEST_END();
+
+    FUNCTION_AUDIT_STRUCT();
 
     ASSERT(this != NULL);
     ASSERT(timeBegin > 0);
@@ -370,7 +375,7 @@ storageGcsAuth(StorageGcs *this, HttpHeader *httpHeader)
 /***********************************************************************************************************************************
 Process Gcs request
 ***********************************************************************************************************************************/
-HttpRequest *
+FN_EXTERN HttpRequest *
 storageGcsRequestAsync(StorageGcs *this, const String *verb, StorageGcsRequestAsyncParam param)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -434,7 +439,7 @@ storageGcsRequestAsync(StorageGcs *this, const String *verb, StorageGcsRequestAs
     FUNCTION_LOG_RETURN(HTTP_REQUEST, result);
 }
 
-HttpResponse *
+FN_EXTERN HttpResponse *
 storageGcsResponse(HttpRequest *request, StorageGcsResponseParam param)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -467,7 +472,7 @@ storageGcsResponse(HttpRequest *request, StorageGcsResponseParam param)
     FUNCTION_LOG_RETURN(HTTP_RESPONSE, result);
 }
 
-HttpResponse *
+FN_EXTERN HttpResponse *
 storageGcsRequest(StorageGcs *const this, const String *const verb, const StorageGcsRequestParam param)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
@@ -543,6 +548,8 @@ storageGcsListInternal(
         FUNCTION_LOG_PARAM(FUNCTIONP, callback);
         FUNCTION_LOG_PARAM_P(VOID, callbackData);
     FUNCTION_LOG_END();
+
+    FUNCTION_AUDIT_CALLBACK();
 
     ASSERT(this != NULL);
     ASSERT(path != NULL);
@@ -936,7 +943,7 @@ static const StorageInterface storageInterfaceGcs =
     .remove = storageGcsRemove,
 };
 
-Storage *
+FN_EXTERN Storage *
 storageGcsNew(
     const String *path, bool write, StoragePathExpressionCallback pathExpressionFunction, const String *bucket,
     StorageGcsKeyType keyType, const String *key, size_t chunkSize, const String *endpoint, TimeMSec timeout, bool verifyPeer,
@@ -966,7 +973,7 @@ storageGcsNew(
 
     OBJ_NEW_BEGIN(StorageGcs, .childQty = MEM_CONTEXT_QTY_MAX, .allocQty = MEM_CONTEXT_QTY_MAX)
     {
-        StorageGcs *driver = OBJ_NEW_ALLOC();
+        StorageGcs *const driver = OBJ_NAME(OBJ_NEW_ALLOC(), Storage::StorageGcs);
 
         *driver = (StorageGcs)
         {

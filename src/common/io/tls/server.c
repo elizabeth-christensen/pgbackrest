@@ -39,18 +39,18 @@ typedef struct TlsServer
 /***********************************************************************************************************************************
 Macros for function logging
 ***********************************************************************************************************************************/
-static String *
-tlsServerToLog(const THIS_VOID)
+static void
+tlsServerToLog(const THIS_VOID, StringStatic *const debugLog)
 {
     THIS(const TlsServer);
 
-    return strNewFmt("{host: %s, timeout: %" PRIu64 "}", strZ(this->host), this->timeout);
+    strStcFmt(debugLog, "{host: %s, timeout: %" PRIu64 "}", strZ(this->host), this->timeout);
 }
 
 #define FUNCTION_LOG_TLS_SERVER_TYPE                                                                                               \
     TlsServer *
 #define FUNCTION_LOG_TLS_SERVER_FORMAT(value, buffer, bufferSize)                                                                  \
-    FUNCTION_LOG_STRING_OBJECT_FORMAT(value, tlsServerToLog, buffer, bufferSize)
+    FUNCTION_LOG_OBJECT_FORMAT(value, tlsServerToLog, buffer, bufferSize)
 
 /***********************************************************************************************************************************
 Free context
@@ -275,7 +275,7 @@ static const IoServerInterface tlsServerInterface =
     .toLog = tlsServerToLog,
 };
 
-IoServer *
+FN_EXTERN IoServer *
 tlsServerNew(
     const String *const host, const String *const caFile, const String *const keyFile, const String *const certFile,
     const TimeMSec timeout)
@@ -296,7 +296,7 @@ tlsServerNew(
 
     OBJ_NEW_BEGIN(TlsServer, .childQty = MEM_CONTEXT_QTY_MAX, .allocQty = MEM_CONTEXT_QTY_MAX, .callbackQty = 1)
     {
-        TlsServer *const driver = OBJ_NEW_ALLOC();
+        TlsServer *const driver = OBJ_NAME(OBJ_NEW_ALLOC(), IoServer::TlsServer);
 
         *driver = (TlsServer)
         {
@@ -315,11 +315,11 @@ tlsServerNew(
             // Let server set cipher order
             SSL_OP_CIPHER_SERVER_PREFERENCE |
 #ifdef SSL_OP_NO_RENEGOTIATION
-	        // Disable renegotiation, available since 1.1.0h. This affects only TLSv1.2 and older protocol versions as TLSv1.3 has
+            // Disable renegotiation, available since 1.1.0h. This affects only TLSv1.2 and older protocol versions as TLSv1.3 has
             // no support for renegotiation.
 	        SSL_OP_NO_RENEGOTIATION |
 #endif
-        	// Disable session tickets
+            // Disable session tickets
 	        SSL_OP_NO_TICKET);
 
         // Disable session caching

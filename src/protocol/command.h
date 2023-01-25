@@ -15,7 +15,7 @@ typedef struct ProtocolCommand ProtocolCommand;
 /***********************************************************************************************************************************
 Constructors
 ***********************************************************************************************************************************/
-ProtocolCommand *protocolCommandNew(const StringId command);
+FN_EXTERN ProtocolCommand *protocolCommandNew(const StringId command);
 
 /***********************************************************************************************************************************
 Functions
@@ -29,10 +29,10 @@ protocolCommandMove(ProtocolCommand *const this, MemContext *const parentNew)
 }
 
 // Read the command output
-PackWrite *protocolCommandParam(ProtocolCommand *this);
+FN_EXTERN PackWrite *protocolCommandParam(ProtocolCommand *this);
 
 // Write protocol command
-void protocolCommandPut(ProtocolCommand *this, IoWrite *write);
+FN_EXTERN void protocolCommandPut(ProtocolCommand *this, IoWrite *write);
 
 /***********************************************************************************************************************************
 Destructor
@@ -46,11 +46,11 @@ protocolCommandFree(ProtocolCommand *const this)
 /***********************************************************************************************************************************
 Macros for function logging
 ***********************************************************************************************************************************/
-String *protocolCommandToLog(const ProtocolCommand *this);
+FN_EXTERN void protocolCommandToLog(const ProtocolCommand *this, StringStatic *debugLog);
 
 #define FUNCTION_LOG_PROTOCOL_COMMAND_TYPE                                                                                         \
     ProtocolCommand *
 #define FUNCTION_LOG_PROTOCOL_COMMAND_FORMAT(value, buffer, bufferSize)                                                            \
-    FUNCTION_LOG_STRING_OBJECT_FORMAT(value, protocolCommandToLog, buffer, bufferSize)
+    FUNCTION_LOG_OBJECT_FORMAT(value, protocolCommandToLog, buffer, bufferSize)
 
 #endif

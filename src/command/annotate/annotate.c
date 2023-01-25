@@ -20,7 +20,7 @@ Annotate Command
 #include "storage/helper.h"
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 cmdAnnotate(void)
 {
     FUNCTION_LOG_VOID(logLevelDebug);

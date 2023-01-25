@@ -11,7 +11,6 @@ Posix Storage Read
 #include "common/log.h"
 #include "common/type/object.h"
 #include "storage/posix/read.h"
-#include "storage/posix/storage.intern.h"
 #include "storage/read.intern.h"
 
 /***********************************************************************************************************************************
@@ -34,7 +33,7 @@ Macros for function logging
 #define FUNCTION_LOG_STORAGE_READ_POSIX_TYPE                                                                                       \
     StorageReadPosix *
 #define FUNCTION_LOG_STORAGE_READ_POSIX_FORMAT(value, buffer, bufferSize)                                                          \
-    objToLog(value, "StorageReadPosix", buffer, bufferSize)
+    objNameToLog(value, "StorageReadPosix", buffer, bufferSize)
 
 /***********************************************************************************************************************************
 Close file descriptor
@@ -207,7 +206,7 @@ storageReadPosixFd(const THIS_VOID)
 }
 
 /**********************************************************************************************************************************/
-StorageRead *
+FN_EXTERN StorageRead *
 storageReadPosixNew(
     StoragePosix *const storage, const String *const name, const bool ignoreMissing, const uint64_t offset,
     const Variant *const limit)
@@ -225,7 +224,7 @@ storageReadPosixNew(
 
     OBJ_NEW_BEGIN(StorageReadPosix, .childQty = MEM_CONTEXT_QTY_MAX, .allocQty = MEM_CONTEXT_QTY_MAX, .callbackQty = 1)
     {
-        StorageReadPosix *driver = OBJ_NEW_ALLOC();
+        StorageReadPosix *const driver = OBJ_NAME(OBJ_NEW_ALLOC(), StorageRead::StorageReadPosix);
 
         *driver = (StorageReadPosix)
         {

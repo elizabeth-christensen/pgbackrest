@@ -15,7 +15,7 @@ typedef struct StorageList StorageList;
 /***********************************************************************************************************************************
 Constructors
 ***********************************************************************************************************************************/
-StorageList *storageLstNew(StorageInfoLevel level);
+FN_EXTERN StorageList *storageLstNew(StorageInfoLevel level);
 
 /***********************************************************************************************************************************
 Getters/Setters
@@ -58,7 +58,7 @@ storageLstSort(StorageList *const this, const SortOrder sortOrder)
 Functions
 ***********************************************************************************************************************************/
 // Insert info
-void storageLstInsert(StorageList *this, unsigned int idx, const StorageInfo *info);
+FN_EXTERN void storageLstInsert(StorageList *this, unsigned int idx, const StorageInfo *info);
 
 // Add info
 FN_INLINE_ALWAYS void
@@ -68,7 +68,7 @@ storageLstAdd(StorageList *const this, const StorageInfo *const info)
 }
 
 // Get info. Note that StorageInfo pointer members (e.g. name) will be undefined after the next call to storageLstGet().
-StorageInfo storageLstGet(StorageList *this, unsigned int idx);
+FN_EXTERN StorageInfo storageLstGet(StorageList *this, unsigned int idx);
 
 // Move to a new parent mem context
 FN_INLINE_ALWAYS StorageList *
@@ -89,11 +89,11 @@ storageLstFree(StorageList *const this)
 /***********************************************************************************************************************************
 Macros for function logging
 ***********************************************************************************************************************************/
-String *storageLstToLog(const StorageList *this);
+FN_EXTERN void storageLstToLog(const StorageList *this, StringStatic *debugLog);
 
 #define FUNCTION_LOG_STORAGE_LIST_TYPE                                                                                             \
     StorageList *
 #define FUNCTION_LOG_STORAGE_LIST_FORMAT(value, buffer, bufferSize)                                                                \
-    FUNCTION_LOG_STRING_OBJECT_FORMAT(value, storageLstToLog, buffer, bufferSize)
+    FUNCTION_LOG_OBJECT_FORMAT(value, storageLstToLog, buffer, bufferSize)
 
 #endif

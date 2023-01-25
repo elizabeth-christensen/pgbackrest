@@ -24,10 +24,10 @@ typedef struct XmlNodeList XmlNodeList;
 Document Constructors
 ***********************************************************************************************************************************/
 // Document with the specified root node
-XmlDocument *xmlDocumentNew(const String *rootNode);
+FN_EXTERN XmlDocument *xmlDocumentNew(const String *rootNode);
 
 // Document from Buffer
-XmlDocument *xmlDocumentNewBuf(const Buffer *);
+FN_EXTERN XmlDocument *xmlDocumentNewBuf(const Buffer *);
 
 /***********************************************************************************************************************************
 Document Getters
@@ -38,7 +38,7 @@ typedef struct XmlDocumentPub
 } XmlDocumentPub;
 
 // Dump document to a buffer
-Buffer *xmlDocumentBuf(const XmlDocument *this);
+FN_EXTERN Buffer *xmlDocumentBuf(const XmlDocument *this);
 
 // Root node
 FN_INLINE_ALWAYS XmlNode *
@@ -60,16 +60,13 @@ xmlDocumentFree(XmlDocument *const this)
 Node Functions
 ***********************************************************************************************************************************/
 // Add a node
-XmlNode *xmlNodeAdd(XmlNode *this, const String *name);
+FN_EXTERN XmlNode *xmlNodeAdd(XmlNode *this, const String *name);
 
 /***********************************************************************************************************************************
 Node Getters/Setters
 ***********************************************************************************************************************************/
-// Node attribute
-String *xmlNodeAttribute(const XmlNode *this, const String *name);
-
 // Node child (by name or index)
-XmlNode *xmlNodeChildN(const XmlNode *this, const String *name, unsigned int index, bool errorOnMissing);
+FN_EXTERN XmlNode *xmlNodeChildN(const XmlNode *this, const String *name, unsigned int index, bool errorOnMissing);
 
 FN_INLINE_ALWAYS XmlNode *
 xmlNodeChild(const XmlNode *const this, const String *const name, const bool errorOnMissing)
@@ -78,19 +75,11 @@ xmlNodeChild(const XmlNode *const this, const String *const name, const bool err
 }
 
 // List of child nodes
-XmlNodeList *xmlNodeChildList(const XmlNode *this, const String *name);
-
-// Node child total
-unsigned int xmlNodeChildTotal(const XmlNode *this, const String *name);
+FN_EXTERN XmlNodeList *xmlNodeChildList(const XmlNode *this, const String *name);
 
 // Node content
-String *xmlNodeContent(const XmlNode *this);
-void xmlNodeContentSet(XmlNode *this, const String *content);
-
-/***********************************************************************************************************************************
-Node Destructor
-***********************************************************************************************************************************/
-void xmlNodeFree(XmlNode *this);
+FN_EXTERN String *xmlNodeContent(const XmlNode *this);
+FN_EXTERN void xmlNodeContentSet(XmlNode *this, const String *content);
 
 /***********************************************************************************************************************************
 Node List Getters
@@ -124,16 +113,16 @@ Macros for function logging
 #define FUNCTION_LOG_XML_DOCUMENT_TYPE                                                                                             \
     XmlDocument *
 #define FUNCTION_LOG_XML_DOCUMENT_FORMAT(value, buffer, bufferSize)                                                                \
-    objToLog(value, "XmlDocument", buffer, bufferSize)
+    objNameToLog(value, "XmlDocument", buffer, bufferSize)
 
 #define FUNCTION_LOG_XML_NODE_TYPE                                                                                                 \
     XmlNode *
 #define FUNCTION_LOG_XML_NODE_FORMAT(value, buffer, bufferSize)                                                                    \
-    objToLog(value, "XmlNode", buffer, bufferSize)
+    objNameToLog(value, "XmlNode", buffer, bufferSize)
 
 #define FUNCTION_LOG_XML_NODE_LIST_TYPE                                                                                            \
     XmlNodeList *
 #define FUNCTION_LOG_XML_NODE_LIST_FORMAT(value, buffer, bufferSize)                                                               \
-    objToLog(value, "XmlNodeList", buffer, bufferSize)
+    objNameToLog(value, "XmlNodeList", buffer, bufferSize)
 
 #endif

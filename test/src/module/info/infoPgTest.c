@@ -153,8 +153,8 @@ testRun(void)
         #define CONTENT_DB_HISTORY                                                                                                 \
             "\n"                                                                                                                   \
             "[db:history]\n"                                                                                                       \
-            "1={\"db-catalog-version\":201409291,\"db-control-version\":942,\"db-system-id\":6569239123849665679,"                 \
-                "\"db-version\":\"9.4\"}\n"                                                                                        \
+            "1={\"db-catalog-version\":20081101,\"db-control-version\":730,\"db-system-id\":6569239123849665679,"                  \
+                "\"db-version\":\"7.3\"}\n"                                                                                        \
             "2={\"db-catalog-version\":201510051,\"db-control-version\":942,\"db-system-id\":6365925855999999999,"                 \
                 "\"db-version\":\"9.5\"}\n"
 
@@ -179,7 +179,9 @@ testRun(void)
 
         pgData = infoPgData(infoPg, 1);
         TEST_RESULT_INT(pgData.id, 1, "    id set");
-        TEST_RESULT_INT(pgData.version, PG_VERSION_94, "    version set");
+        TEST_RESULT_INT(pgData.version, 70300, "    version set");
+        TEST_RESULT_INT(pgData.controlVersion, 730, "    control version set");
+        TEST_RESULT_INT(pgData.catalogVersion, 20081101, "    catalog version set");
         TEST_RESULT_UINT(pgData.systemId, 6569239123849665679, "    system-id set");
 
         contentSave = bufNew(0);
@@ -206,10 +208,11 @@ testRun(void)
         pgDataTest.version = (unsigned int)4294967295;
         pgDataTest.systemId = 18446744073709551615U;
         pgDataTest.catalogVersion = 200101011;
+        char logBuf[STACK_TRACE_PARAM_MAX];
 
-        TEST_RESULT_STR_Z(
-            infoPgDataToLog(&pgDataTest),
-            "{id: 4294967295, version: 4294967295, systemId: 18446744073709551615, catalogVersion: 200101011}",
-            "    check max format");
+        TEST_RESULT_VOID(FUNCTION_LOG_OBJECT_FORMAT(&pgDataTest, infoPgDataToLog, logBuf, sizeof(logBuf)), "infoPgDataToLog");
+        TEST_RESULT_Z(
+            logBuf, "{id: 4294967295, version: 4294967295, systemId: 18446744073709551615, catalogVersion: 200101011}",
+            "check log");
     }
 }

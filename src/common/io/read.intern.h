@@ -30,7 +30,7 @@ typedef struct IoReadInterface
 #define ioReadNewP(driver, ...)                                                                                                    \
     ioReadNew(driver, (IoReadInterface){__VA_ARGS__})
 
-IoRead *ioReadNew(void *driver, IoReadInterface interface);
+FN_EXTERN IoRead *ioReadNew(void *driver, IoReadInterface interface);
 
 /***********************************************************************************************************************************
 Getters/Setters
@@ -69,6 +69,6 @@ Macros for function logging
 #define FUNCTION_LOG_IO_READ_INTERFACE_TYPE                                                                                        \
     IoReadInterface
 #define FUNCTION_LOG_IO_READ_INTERFACE_FORMAT(value, buffer, bufferSize)                                                           \
-    objToLog(&value, "IoReadInterface", buffer, bufferSize)
+    objNameToLog(&value, "IoReadInterface", buffer, bufferSize)
 
 #endif

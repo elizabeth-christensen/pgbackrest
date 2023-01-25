@@ -13,7 +13,6 @@ Posix Storage File write
 #include "common/log.h"
 #include "common/type/object.h"
 #include "common/user.h"
-#include "storage/posix/storage.intern.h"
 #include "storage/posix/write.h"
 #include "storage/write.intern.h"
 
@@ -36,7 +35,7 @@ Macros for function logging
 #define FUNCTION_LOG_STORAGE_WRITE_POSIX_TYPE                                                                                      \
     StorageWritePosix *
 #define FUNCTION_LOG_STORAGE_WRITE_POSIX_FORMAT(value, buffer, bufferSize)                                                         \
-    objToLog(value, "StorageWritePosix", buffer, bufferSize)
+    objNameToLog(value, "StorageWritePosix", buffer, bufferSize)
 
 /***********************************************************************************************************************************
 File open constants
@@ -87,7 +86,7 @@ storageWritePosixOpen(THIS_VOID)
     // Attempt to create the path if it is missing
     if (this->fd == -1 && errno == ENOENT && this->interface.createPath)                                            // {vm_covered}
     {
-         // Create the path
+        // Create the path
         storageInterfacePathCreateP(this->storage, this->path, false, false, this->interface.modePath);
 
         // Open file again
@@ -220,7 +219,7 @@ storageWritePosixFd(const THIS_VOID)
 }
 
 /**********************************************************************************************************************************/
-StorageWrite *
+FN_EXTERN StorageWrite *
 storageWritePosixNew(
     StoragePosix *const storage, const String *const name, const mode_t modeFile, const mode_t modePath, const String *const user,
     const String *const group, const time_t timeModified, const bool createPath, const bool syncFile, const bool syncPath,
@@ -250,7 +249,7 @@ storageWritePosixNew(
 
     OBJ_NEW_BEGIN(StorageWritePosix, .childQty = MEM_CONTEXT_QTY_MAX, .allocQty = MEM_CONTEXT_QTY_MAX, .callbackQty = 1)
     {
-        StorageWritePosix *driver = OBJ_NEW_ALLOC();
+        StorageWritePosix *const driver = OBJ_NAME(OBJ_NEW_ALLOC(), StorageWrite::StorageWritePosix);
 
         *driver = (StorageWritePosix)
         {

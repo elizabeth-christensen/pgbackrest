@@ -17,7 +17,7 @@ Constants
 #define BACKUP_LINK_LATEST                                          "latest"
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 backupFileRepoPath(const String *const backupLabel, const BackupFileRepoPathParam param)
 {
     FUNCTION_TEST_BEGIN();
@@ -25,6 +25,7 @@ backupFileRepoPath(const String *const backupLabel, const BackupFileRepoPathPara
         FUNCTION_TEST_PARAM(STRING, param.manifestName);
         FUNCTION_TEST_PARAM(UINT64, param.bundleId);
         FUNCTION_TEST_PARAM(ENUM, param.compressType);
+        FUNCTION_TEST_PARAM(BOOL, param.blockIncr);
     FUNCTION_TEST_END();
 
     ASSERT(backupLabel != NULL);
@@ -35,13 +36,17 @@ backupFileRepoPath(const String *const backupLabel, const BackupFileRepoPathPara
     if (param.bundleId != 0)
         strCatFmt(result, MANIFEST_PATH_BUNDLE "/%" PRIu64, param.bundleId);
     else
-        strCatFmt(result, "%s%s", strZ(param.manifestName), strZ(compressExtStr(param.compressType)));
+    {
+        strCatFmt(
+            result, "%s%s", strZ(param.manifestName),
+            param.blockIncr ? BACKUP_BLOCK_INCR_EXT : strZ(compressExtStr(param.compressType)));
+    }
 
     FUNCTION_TEST_RETURN(STRING, result);
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 backupLabelFormat(BackupType type, const String *backupLabelPrior, time_t timestamp)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
@@ -79,7 +84,7 @@ backupLabelFormat(BackupType type, const String *backupLabelPrior, time_t timest
 }
 
 /**********************************************************************************************************************************/
-String *
+FN_EXTERN String *
 backupRegExp(const BackupRegExpParam param)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
@@ -142,7 +147,7 @@ backupRegExp(const BackupRegExpParam param)
 }
 
 /**********************************************************************************************************************************/
-void
+FN_EXTERN void
 backupLinkLatest(const String *backupLabel, unsigned int repoIdx)
 {
     FUNCTION_TEST_BEGIN();

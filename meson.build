@@ -4,7 +4,7 @@
 project(
     'pgbackrest',
     ['c'],
-    version: '2.43',
+    version: '2.44',
     license: 'MIT',
     meson_version: '>=0.45',
     default_options: [
@@ -14,6 +14,9 @@ project(
 
         # Base options
         'b_ndebug=if-release',
+
+        # Perform unity builds in a single file
+        'unity_size=100000',
 
         # Compiler options
         'c_std=c99',
@@ -129,6 +132,13 @@ add_project_arguments(cc.get_supported_arguments('-fmacro-prefix-map=@0@/test/sr
 # Build configuration
 ####################################################################################################################################
 configuration = configuration_data()
+
+# Find optional backtrace library
+lib_backtrace = cc.find_library('backtrace', required: false)
+
+if lib_backtrace.found()
+    configuration.set('HAVE_LIBBACKTRACE', true, description: 'Is libbacktrace present?')
+endif
 
 # Find required bz2 library
 lib_bz2 = cc.find_library('bz2')
