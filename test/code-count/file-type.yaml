@@ -583,6 +583,14 @@ src/command/restore/blockChecksum.h:
   class: core
   type: c/h
 
+src/command/restore/blockDelta.c:
+  class: core
+  type: c
+
+src/command/restore/blockDelta.h:
+  class: core
+  type: c/h
+
 src/command/restore/file.c:
   class: core
   type: c
@@ -816,6 +824,18 @@ src/common/crypto/hash.h:
   type: c/h
 
 src/common/crypto/md5.vendor.c.inc:
+  class: core/vendor
+  type: c
+
+src/common/crypto/xxhash.c:
+  class: core
+  type: c
+
+src/common/crypto/xxhash.h:
+  class: core
+  type: c/h
+
+src/common/crypto/xxhash.vendor.c.inc:
   class: core/vendor
   type: c
 
