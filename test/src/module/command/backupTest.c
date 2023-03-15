@@ -50,7 +50,8 @@ testBlockDelta(const BlockMap *const blockMap, const size_t blockSize, const siz
         {
             const BlockDeltaSuperBlock *const superBlock = lstGet(read->superBlockList, superBlockIdx);
 
-            strCatFmt(result, "  super block {size: %" PRIu64 "}\n", superBlock->size);
+            strCatFmt(
+                result, "  super block {max: %" PRIu64 ", size: %" PRIu64 "}\n", superBlock->superBlockSize, superBlock->size);
 
             for (unsigned int blockIdx = 0; blockIdx < lstSize(superBlock->blockList); blockIdx++)
             {
@@ -205,7 +206,8 @@ testBackupValidateList(
 
                         ioReadOpen(storageReadIo(read));
 
-                        const BlockMap *const blockMap = blockMapNewRead(storageReadIo(read), file.blockIncrChecksumSize);
+                        const BlockMap *const blockMap = blockMapNewRead(
+                            storageReadIo(read), file.blockIncrSize, file.blockIncrChecksumSize);
 
                         // Build map log
                         String *const mapLog = strNew();
@@ -490,330 +492,6 @@ testBackupValidate(const Storage *const storage, const String *const path, TestB
 }
 
 /***********************************************************************************************************************************
-Generate pq scripts for versions of PostgreSQL
-***********************************************************************************************************************************/
-typedef struct TestBackupPqScriptParam
-{
-    VAR_PARAM_HEADER;
-    bool startFast;
-    bool backupStandby;
-    bool errorAfterStart;
-    bool noWal;                                                     // Don't write test WAL segments
-    bool noPriorWal;                                                // Don't write prior test WAL segments
-    bool noArchiveCheck;                                            // Do not check archive
-    CompressType walCompressType;                                   // Compress type for the archive files
-    CipherType cipherType;                                          // Cipher type
-    const char *cipherPass;                                         // Cipher pass
-    unsigned int walTotal;                                          // Total WAL to write
-    unsigned int timeline;                                          // Timeline to use for WAL files
-    const String *pgVersionForce;                                     // PG version to use when control/catalog not found
-} TestBackupPqScriptParam;
-
-#define testBackupPqScriptP(pgVersion, backupStartTime, ...)                                                                       \
-    testBackupPqScript(pgVersion, backupStartTime, (TestBackupPqScriptParam){VAR_PARAM_INIT, __VA_ARGS__})
-
-static void
-testBackupPqScript(unsigned int pgVersion, time_t backupTimeStart, TestBackupPqScriptParam param)
-{
-    const char *pg1Path = TEST_PATH "/pg1";
-    const char *pg2Path = TEST_PATH "/pg2";
-
-    // If no timeline specified then use timeline 1
-    param.timeline = param.timeline == 0 ? 1 : param.timeline;
-
-    // Read pg_control to get info about the cluster
-    PgControl pgControl = pgControlFromFile(storagePg(), param.pgVersionForce);
-
-    // Set archive timeout really small to save time on errors
-    cfgOptionSet(cfgOptArchiveTimeout, cfgSourceParam, varNewInt64(100));
-
-    // Set LSN and WAL start/stop
-    uint64_t lsnStart = ((uint64_t)backupTimeStart & 0xFFFFFF00) << 28;
-    uint64_t lsnStop =
-        lsnStart + ((param.walTotal == 0 ? 0 : param.walTotal - 1) * pgControl.walSegmentSize) + (pgControl.walSegmentSize / 2);
-
-    const char *walSegmentPrior = strZ(
-        pgLsnToWalSegment(param.timeline, lsnStart - pgControl.walSegmentSize, pgControl.walSegmentSize));
-    const char *lsnStartStr = strZ(pgLsnToStr(lsnStart));
-    const char *walSegmentStart = strZ(pgLsnToWalSegment(param.timeline, lsnStart, pgControl.walSegmentSize));
-    const char *lsnStopStr = strZ(pgLsnToStr(lsnStop));
-    const char *walSegmentStop = strZ(pgLsnToWalSegment(param.timeline, lsnStop, pgControl.walSegmentSize));
-
-    // Save pg_control with updated info
-    pgControl.checkpoint = lsnStart;
-    pgControl.timeline = param.timeline;
-
-    HRN_STORAGE_PUT(
-        storagePgIdxWrite(0), PG_PATH_GLOBAL "/" PG_FILE_PGCONTROL, hrnPgControlToBuffer(0, pgControl),
-        .timeModified = backupTimeStart);
-
-    // Update pg_control on primary with the backup time
-    HRN_PG_CONTROL_TIME(storagePgIdxWrite(0), backupTimeStart);
-
-    // Write WAL segments to the archive
-    // -----------------------------------------------------------------------------------------------------------------------------
-    if (!param.noPriorWal)
-    {
-        InfoArchive *infoArchive = infoArchiveLoadFile(
-            storageRepo(), INFO_ARCHIVE_PATH_FILE_STR, param.cipherType == 0 ? cipherTypeNone : param.cipherType,
-            param.cipherPass == NULL ? NULL : STR(param.cipherPass));
-        const String *archiveId = infoArchiveId(infoArchive);
-        StringList *walSegmentList = pgLsnRangeToWalSegmentList(
-            param.timeline, lsnStart - pgControl.walSegmentSize, param.noWal ? lsnStart - pgControl.walSegmentSize : lsnStop,
-            pgControl.walSegmentSize);
-
-        Buffer *walBuffer = bufNew((size_t)pgControl.walSegmentSize);
-        bufUsedSet(walBuffer, bufSize(walBuffer));
-        memset(bufPtr(walBuffer), 0, bufSize(walBuffer));
-        HRN_PG_WAL_TO_BUFFER(walBuffer, pgControl.version, .systemId = pgControl.systemId);
-        const String *walChecksum = strNewEncode(encodingHex, cryptoHashOne(hashTypeSha1, walBuffer));
-
-        for (unsigned int walSegmentIdx = 0; walSegmentIdx < strLstSize(walSegmentList); walSegmentIdx++)
-        {
-            StorageWrite *write = storageNewWriteP(
-                storageRepoWrite(),
-                strNewFmt(
-                    STORAGE_REPO_ARCHIVE "/%s/%s-%s%s", strZ(archiveId), strZ(strLstGet(walSegmentList, walSegmentIdx)),
-                    strZ(walChecksum), strZ(compressExtStr(param.walCompressType))));
-
-            if (param.walCompressType != compressTypeNone)
-                ioFilterGroupAdd(ioWriteFilterGroup(storageWriteIo(write)), compressFilterP(param.walCompressType, 1));
-
-            storagePutP(write, walBuffer);
-        }
-    }
-
-    // -----------------------------------------------------------------------------------------------------------------------------
-    if (pgVersion == PG_VERSION_95)
-    {
-        ASSERT(!param.backupStandby);
-        ASSERT(!param.errorAfterStart);
-
-        if (param.noArchiveCheck)
-        {
-            harnessPqScriptSet((HarnessPq [])
-            {
-                // Connect to primary
-                HRNPQ_MACRO_OPEN_GE_93(1, "dbname='postgres' port=5432", PG_VERSION_95, pg1Path, false, NULL, NULL),
-
-                // Get start time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000),
-
-                // Start backup
-                HRNPQ_MACRO_ADVISORY_LOCK(1, true),
-                HRNPQ_MACRO_IS_IN_BACKUP(1, false),
-                HRNPQ_MACRO_START_BACKUP_LE_95(1, param.startFast, lsnStartStr, walSegmentStart),
-                HRNPQ_MACRO_DATABASE_LIST_1(1, "test1"),
-                HRNPQ_MACRO_TABLESPACE_LIST_0(1),
-
-                // Get copy start time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 999),
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 1000),
-
-                // Ping
-                HRNPQ_MACRO_IS_STANDBY_QUERY(1, false),
-                HRNPQ_MACRO_IS_STANDBY_QUERY(1, false),
-
-                // Stop backup
-                HRNPQ_MACRO_STOP_BACKUP_LE_95(1, lsnStopStr, walSegmentStop),
-
-                // Get stop time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 2000),
-
-                HRNPQ_MACRO_DONE()
-            });
-        }
-        else
-        {
-            harnessPqScriptSet((HarnessPq [])
-            {
-                // Connect to primary
-                HRNPQ_MACRO_OPEN_GE_93(1, "dbname='postgres' port=5432", PG_VERSION_95, pg1Path, false, NULL, NULL),
-
-                // Get start time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000),
-
-                // Start backup
-                HRNPQ_MACRO_ADVISORY_LOCK(1, true),
-                HRNPQ_MACRO_IS_IN_BACKUP(1, false),
-                HRNPQ_MACRO_CURRENT_WAL_LE_96(1, walSegmentPrior),
-                HRNPQ_MACRO_START_BACKUP_LE_95(1, param.startFast, lsnStartStr, walSegmentStart),
-                HRNPQ_MACRO_DATABASE_LIST_1(1, "test1"),
-                HRNPQ_MACRO_TABLESPACE_LIST_0(1),
-
-                // Get copy start time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 999),
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 1000),
-
-                // Ping
-                HRNPQ_MACRO_IS_STANDBY_QUERY(1, false),
-                HRNPQ_MACRO_IS_STANDBY_QUERY(1, false),
-
-                // Stop backup
-                HRNPQ_MACRO_STOP_BACKUP_LE_95(1, lsnStopStr, walSegmentStop),
-
-                // Get stop time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 2000),
-
-                HRNPQ_MACRO_DONE()
-            });
-        }
-    }
-    // -----------------------------------------------------------------------------------------------------------------------------
-    else if (pgVersion == PG_VERSION_96)
-    {
-        ASSERT(param.backupStandby);
-        ASSERT(!param.errorAfterStart);
-        ASSERT(!param.noArchiveCheck);
-
-        // Save pg_control with updated info
-        HRN_STORAGE_PUT(storagePgIdxWrite(1), PG_PATH_GLOBAL "/" PG_FILE_PGCONTROL, hrnPgControlToBuffer(0, pgControl));
-
-        if (param.noPriorWal)
-        {
-            harnessPqScriptSet((HarnessPq [])
-            {
-                // Connect to primary
-                HRNPQ_MACRO_OPEN_GE_96(1, "dbname='postgres' port=5432", PG_VERSION_96, pg1Path, false, NULL, NULL),
-
-                // Connect to standby
-                HRNPQ_MACRO_OPEN_GE_96(2, "dbname='postgres' port=5433", PG_VERSION_96, pg2Path, true, NULL, NULL),
-
-                // Get start time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000),
-
-                // Start backup
-                HRNPQ_MACRO_ADVISORY_LOCK(1, true),
-                HRNPQ_MACRO_CURRENT_WAL_LE_96(1, walSegmentPrior),
-                HRNPQ_MACRO_START_BACKUP_96(1, true, lsnStartStr, walSegmentStart),
-                HRNPQ_MACRO_DATABASE_LIST_1(1, "test1"),
-                HRNPQ_MACRO_TABLESPACE_LIST_0(1),
-
-                // Wait for standby to sync
-                HRNPQ_MACRO_REPLAY_WAIT_96(2, lsnStartStr),
-
-                HRNPQ_MACRO_DONE()
-            });
-        }
-        else
-        {
-            harnessPqScriptSet((HarnessPq [])
-            {
-                // Connect to primary
-                HRNPQ_MACRO_OPEN_GE_96(1, "dbname='postgres' port=5432", PG_VERSION_96, pg1Path, false, NULL, NULL),
-
-                // Connect to standby
-                HRNPQ_MACRO_OPEN_GE_96(2, "dbname='postgres' port=5433", PG_VERSION_96, pg2Path, true, NULL, NULL),
-
-                // Get start time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000),
-
-                // Start backup
-                HRNPQ_MACRO_ADVISORY_LOCK(1, true),
-                HRNPQ_MACRO_CURRENT_WAL_LE_96(1, walSegmentPrior),
-                HRNPQ_MACRO_START_BACKUP_96(1, true, lsnStartStr, walSegmentStart),
-                HRNPQ_MACRO_DATABASE_LIST_1(1, "test1"),
-                HRNPQ_MACRO_TABLESPACE_LIST_0(1),
-
-                // Wait for standby to sync
-                HRNPQ_MACRO_REPLAY_WAIT_96(2, lsnStartStr),
-
-                // Get copy start time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 999),
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 1000),
-
-                // Ping
-                HRNPQ_MACRO_IS_STANDBY_QUERY(1, false),
-                HRNPQ_MACRO_IS_STANDBY_QUERY(2, true),
-                HRNPQ_MACRO_IS_STANDBY_QUERY(1, false),
-                HRNPQ_MACRO_IS_STANDBY_QUERY(2, true),
-
-                // Stop backup
-                HRNPQ_MACRO_STOP_BACKUP_96(1, lsnStopStr, walSegmentStop, false),
-
-                // Get stop time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 2000),
-
-                HRNPQ_MACRO_DONE()
-            });
-        }
-    }
-    // -----------------------------------------------------------------------------------------------------------------------------
-    else if (pgVersion == PG_VERSION_11)
-    {
-        ASSERT(!param.backupStandby);
-        ASSERT(!param.noArchiveCheck);
-
-        if (param.errorAfterStart)
-        {
-            harnessPqScriptSet((HarnessPq [])
-            {
-                // Connect to primary
-                HRNPQ_MACRO_OPEN_GE_96(1, "dbname='postgres' port=5432", PG_VERSION_11, pg1Path, false, NULL, NULL),
-
-                // Get start time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000),
-
-                // Start backup
-                HRNPQ_MACRO_ADVISORY_LOCK(1, true),
-                HRNPQ_MACRO_CURRENT_WAL_GE_10(1, walSegmentPrior),
-                HRNPQ_MACRO_START_BACKUP_GE_10(1, param.startFast, lsnStartStr, walSegmentStart),
-                HRNPQ_MACRO_DATABASE_LIST_1(1, "test1"),
-                HRNPQ_MACRO_TABLESPACE_LIST_1(1, 32768, "tblspc32768"),
-
-                // Get copy start time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 999),
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 1000),
-
-                HRNPQ_MACRO_DONE()
-            });
-        }
-        else
-        {
-            harnessPqScriptSet((HarnessPq [])
-            {
-                // Connect to primary
-                HRNPQ_MACRO_OPEN_GE_96(1, "dbname='postgres' port=5432", PG_VERSION_11, pg1Path, false, NULL, NULL),
-
-                // Get start time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000),
-
-                // Start backup
-                HRNPQ_MACRO_ADVISORY_LOCK(1, true),
-                HRNPQ_MACRO_CURRENT_WAL_GE_10(1, walSegmentStart),
-                HRNPQ_MACRO_START_BACKUP_GE_10(1, param.startFast, lsnStartStr, walSegmentStart),
-
-                // Switch WAL segment so it can be checked
-                HRNPQ_MACRO_CREATE_RESTORE_POINT(1, "X/X"),
-                HRNPQ_MACRO_WAL_SWITCH(1, "wal", walSegmentStart),
-
-                // Get database and tablespace list
-                HRNPQ_MACRO_DATABASE_LIST_1(1, "test1"),
-                HRNPQ_MACRO_TABLESPACE_LIST_1(1, 32768, "tblspc32768"),
-
-                // Get copy start time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 999),
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 1000),
-
-                // Ping
-                HRNPQ_MACRO_IS_STANDBY_QUERY(1, false),
-                HRNPQ_MACRO_IS_STANDBY_QUERY(1, false),
-
-                // Stop backup
-                HRNPQ_MACRO_STOP_BACKUP_GE_10(1, lsnStopStr, walSegmentStop, true),
-
-                // Get stop time
-                HRNPQ_MACRO_TIME_QUERY(1, (int64_t)backupTimeStart * 1000 + 2000),
-
-                HRNPQ_MACRO_DONE()
-            });
-        }
-    }
-    else
-        THROW_FMT(AssertError, "unsupported test version %u", pgVersion);           // {uncoverable - no invalid versions in tests}
-}
-
-/***********************************************************************************************************************************
 Test Run
 ***********************************************************************************************************************************/
 static void
@@ -1006,6 +684,7 @@ testRun(void)
         BlockMapItem blockMapItem =
         {
             .reference = 128,
+            .superBlockSize = 1,
             .bundleId = 0,
             .offset = 0,
             .size = 3,
@@ -1018,6 +697,7 @@ testRun(void)
         blockMapItem = (BlockMapItem)
         {
             .reference = 128,
+            .superBlockSize = 1,
             .bundleId = 0,
             .offset = 3,
             .size = 5,
@@ -1029,6 +709,7 @@ testRun(void)
         blockMapItem = (BlockMapItem)
         {
             .reference = 0,
+            .superBlockSize = 1,
             .bundleId = 1,
             .offset = 1,
             .size = 5,
@@ -1040,6 +721,7 @@ testRun(void)
         blockMapItem = (BlockMapItem)
         {
             .reference = 128,
+            .superBlockSize = 1,
             .bundleId = 0,
             .offset = 8,
             .size = 99,
@@ -1051,6 +733,7 @@ testRun(void)
         blockMapItem = (BlockMapItem)
         {
             .reference = 0,
+            .superBlockSize = 1,
             .bundleId = 1,
             .offset = 7,
             .size = 99,
@@ -1063,6 +746,7 @@ testRun(void)
         blockMapItem = (BlockMapItem)
         {
             .reference = 4,
+            .superBlockSize = 1,
             .bundleId = 0,
             .offset = 0,
             .size = 8,
@@ -1076,36 +760,36 @@ testRun(void)
 
         Buffer *buffer = bufNew(256);
         IoWrite *write = ioBufferWriteNewOpen(buffer);
-        TEST_RESULT_VOID(blockMapWrite(blockMap, write, true, 5), "save");
+        TEST_RESULT_VOID(blockMapWrite(blockMap, write, 1, 5), "save");
         ioWriteClose(write);
 
         TEST_RESULT_STR_Z(
             strNewEncode(encodingHex, buffer),
-            "02"                                        // Blocks are equal
+            "00"                                        // Version 0
 
             "8008"                                      // reference 128
-            "06"                                        // super block size 3
+            "18"                                        // size 3
             "eeee01ffff"                                // checksum
-            "09"                                        // super block size 5
+            "21"                                        // size
             "eeee02ffff"                                // checksum
 
             "06"                                        // reference 0
             "01"                                        // bundle 1
             "01"                                        // offset 1
-            "01"                                        // super block size 5
+            "01"                                        // size 1
             "eeee03ffff"                                // checksum
 
             "8008"                                      // reference 128
-            "f902"                                      // super block size 99
+            "e10b"                                      // size 99
             "eeee04ffff"                                // checksum
 
             "04"                                        // reference 0
             "01"                                        // offset 7
-            "01"                                        // super block size 99
+            "01"                                        // size 99
             "eeee05ffff"                                // checksum
 
             "21"                                        // reference 0
-            "eb02"                                      // super block size 8
+            "a90b"                                      // size 8
             "eeee88ffff",                               // checksum
             "compare");
 
@@ -1114,7 +798,7 @@ testRun(void)
 
         Buffer *bufferCompare = bufNew(256);
         write = ioBufferWriteNewOpen(bufferCompare);
-        TEST_RESULT_VOID(blockMapWrite(blockMapNewRead(ioBufferReadNewOpen(buffer), 5), write, true, 5), "read and save");
+        TEST_RESULT_VOID(blockMapWrite(blockMapNewRead(ioBufferReadNewOpen(buffer), 1, 5), write, 1, 5), "read and save");
         ioWriteClose(write);
 
         TEST_RESULT_STR(strNewEncode(encodingHex, bufferCompare), strNewEncode(encodingHex, buffer), "compare");
@@ -1123,23 +807,23 @@ testRun(void)
         TEST_TITLE("equal block delta");
 
         TEST_RESULT_STR_Z(
-            testBlockDelta(blockMapNewRead(ioBufferReadNewOpen(buffer), 5), 8, 5),
+            testBlockDelta(blockMapNewRead(ioBufferReadNewOpen(buffer), 1, 5), 1, 5),
             "read {reference: 128, bundleId: 0, offset: 0, size: 107}\n"
-            "  super block {size: 3}\n"
+            "  super block {max: 1, size: 3}\n"
             "    block {no: 0, offset: 0}\n"
-            "  super block {size: 5}\n"
-            "    block {no: 0, offset: 8}\n"
-            "  super block {size: 99}\n"
-            "    block {no: 0, offset: 24}\n"
+            "  super block {max: 1, size: 5}\n"
+            "    block {no: 0, offset: 1}\n"
+            "  super block {max: 1, size: 99}\n"
+            "    block {no: 0, offset: 3}\n"
             "read {reference: 4, bundleId: 0, offset: 0, size: 8}\n"
-            "  super block {size: 8}\n"
-            "    block {no: 0, offset: 40}\n"
+            "  super block {max: 1, size: 8}\n"
+            "    block {no: 0, offset: 5}\n"
             "read {reference: 0, bundleId: 1, offset: 1, size: 5}\n"
-            "  super block {size: 5}\n"
-            "    block {no: 0, offset: 16}\n"
+            "  super block {max: 1, size: 5}\n"
+            "    block {no: 0, offset: 2}\n"
             "read {reference: 0, bundleId: 1, offset: 7, size: 99}\n"
-            "  super block {size: 99}\n"
-            "    block {no: 0, offset: 32}\n",
+            "  super block {max: 1, size: 99}\n"
+            "    block {no: 0, offset: 4}\n",
             "check delta");
 
         // -------------------------------------------------------------------------------------------------------------------------
@@ -1150,6 +834,7 @@ testRun(void)
         blockMapItem = (BlockMapItem)
         {
             .reference = 0,
+            .superBlockSize = 6,
             .offset = 0,
             .size = 4,
             .block = 0,
@@ -1161,6 +846,7 @@ testRun(void)
         blockMapItem = (BlockMapItem)
         {
             .reference = 0,
+            .superBlockSize = 6,
             .offset = 0,
             .size = 4,
             .block = 1,
@@ -1172,6 +858,7 @@ testRun(void)
         blockMapItem = (BlockMapItem)
         {
             .reference = 0,
+            .superBlockSize = 6,
             .offset = 4,
             .size = 5,
             .block = 0,
@@ -1183,6 +870,7 @@ testRun(void)
         blockMapItem = (BlockMapItem)
         {
             .reference = 1,
+            .superBlockSize = 3,
             .offset = 0,
             .size = 99,
             .block = 0,
@@ -1194,6 +882,7 @@ testRun(void)
         blockMapItem = (BlockMapItem)
         {
             .reference = 0,
+            .superBlockSize = 6,
             .offset = 4,
             .size = 5,
             .block = 3,
@@ -1205,6 +894,7 @@ testRun(void)
         blockMapItem = (BlockMapItem)
         {
             .reference = 2,
+            .superBlockSize = 2,
             .offset = 0,
             .size = 1,
             .block = 0,
@@ -1216,6 +906,7 @@ testRun(void)
         blockMapItem = (BlockMapItem)
         {
             .reference = 0,
+            .superBlockSize = 6,
             .offset = 4,
             .size = 5,
             .block = 5,
@@ -1227,10 +918,23 @@ testRun(void)
         blockMapItem = (BlockMapItem)
         {
             .reference = 0,
+            .superBlockSize = 2,
             .offset = 9,
             .size = 6,
             .block = 0,
             .checksum = {0xee, 0xee, 0x08, 0, 0, 0, 0xff, 0xff},
+        };
+
+        TEST_RESULT_VOID(blockMapAdd(blockMap, &blockMapItem), "add");
+
+        blockMapItem = (BlockMapItem)
+        {
+            .reference = 1,
+            .superBlockSize = 3,
+            .offset = 99,
+            .size = 1,
+            .block = 1,
+            .checksum = {0xee, 0xee, 0x09, 0, 0, 0, 0xff, 0xff},
         };
 
         TEST_RESULT_VOID(blockMapAdd(blockMap, &blockMapItem), "add");
@@ -1240,7 +944,7 @@ testRun(void)
 
         buffer = bufNew(256);
         write = ioBufferWriteNewOpen(buffer);
-        TEST_RESULT_VOID(blockMapWrite(blockMap, write, false, 8), "save");
+        TEST_RESULT_VOID(blockMapWrite(blockMap, write, 3, 8), "save");
         ioWriteClose(write);
 
         TEST_RESULT_STR_Z(
@@ -1248,37 +952,43 @@ testRun(void)
             "00"                                        // Blocks are unequal
 
             "00"                                        // reference 0
-            "08"                                        // size 4
-            "00"                                        // block 0
+            "22"                                        // size 4
+            "04"                                        // super block size 6
             "eeee01000000ffff"                          // checksum
-
-            "03"                                        // block 1
             "eeee02000000ffff"                          // checksum
 
-            "05"                                        // size 5
-            "01"                                        // block 0
+            "15"                                        // size 5
+            "00"                                        // block total 1
             "eeee03000000ffff"                          // checksum
 
             "08"                                        // reference 1
-            "f902"                                      // size 99
-            "01"                                        // block 0
+            "e10b"                                      // size 99
             "eeee04000000ffff"                          // checksum
 
             "06"                                        // reference 0
-            "07"                                        // block 3
+            "01"                                        // block total 1
+            "02"                                        // block 3
             "eeee05000000ffff"                          // checksum
 
             "10"                                        // reference 2
-            "0f"                                        // size 1
-            "01"                                        // block 0
+            "3b01"                                      // size 1
+            "02"                                        // super block size 2
             "eeee06000000ffff"                          // checksum
 
-            "03"                                        // reference 0
-            "05"                                        // size 5
+            "02"                                        // reference 0
+            "01"                                        // block total 1
+            "01"                                        // block 5
             "eeee07000000ffff"                          // checksum
-            "05"                                        // size 6
-            "01"                                        // block
-            "eeee08000000ffff",                         // checksum
+
+            "13"                                        // size 6
+            "0102"                                      // size 2
+            "eeee08000000ffff"                          // checksum
+
+            "09"                                        // reference 1
+            "4d"                                        // size 1
+            "01"                                        // block total 1
+            "01"                                        // block 1
+            "eeee09000000ffff",                         // checksum
             "compare");
 
         // -------------------------------------------------------------------------------------------------------------------------
@@ -1286,7 +996,7 @@ testRun(void)
 
         bufferCompare = bufNew(256);
         write = ioBufferWriteNewOpen(bufferCompare);
-        TEST_RESULT_VOID(blockMapWrite(blockMapNewRead(ioBufferReadNewOpen(buffer), 8), write, false, 8), "read and save");
+        TEST_RESULT_VOID(blockMapWrite(blockMapNewRead(ioBufferReadNewOpen(buffer), 3, 8), write, 3, 8), "read and save");
         ioWriteClose(write);
 
         TEST_RESULT_STR(strNewEncode(encodingHex, bufferCompare), strNewEncode(encodingHex, buffer), "compare");
@@ -1295,23 +1005,25 @@ testRun(void)
         TEST_TITLE("unequal block delta");
 
         TEST_RESULT_STR_Z(
-            testBlockDelta(blockMapNewRead(ioBufferReadNewOpen(buffer), 8), 8, 8),
+            testBlockDelta(blockMapNewRead(ioBufferReadNewOpen(buffer), 3, 8), 3, 8),
             "read {reference: 2, bundleId: 0, offset: 0, size: 1}\n"
-            "  super block {size: 1}\n"
-            "    block {no: 0, offset: 40}\n"
-            "read {reference: 1, bundleId: 0, offset: 0, size: 99}\n"
-            "  super block {size: 99}\n"
-            "    block {no: 0, offset: 24}\n"
+            "  super block {max: 2, size: 1}\n"
+            "    block {no: 0, offset: 15}\n"
+            "read {reference: 1, bundleId: 0, offset: 0, size: 100}\n"
+            "  super block {max: 3, size: 99}\n"
+            "    block {no: 0, offset: 9}\n"
+            "  super block {max: 3, size: 1}\n"
+            "    block {no: 1, offset: 24}\n"
             "read {reference: 0, bundleId: 0, offset: 0, size: 15}\n"
-            "  super block {size: 4}\n"
+            "  super block {max: 6, size: 4}\n"
             "    block {no: 0, offset: 0}\n"
-            "    block {no: 1, offset: 8}\n"
-            "  super block {size: 5}\n"
-            "    block {no: 0, offset: 16}\n"
-            "    block {no: 3, offset: 32}\n"
-            "    block {no: 5, offset: 48}\n"
-            "  super block {size: 6}\n"
-            "    block {no: 0, offset: 56}\n",
+            "    block {no: 1, offset: 3}\n"
+            "  super block {max: 6, size: 5}\n"
+            "    block {no: 0, offset: 6}\n"
+            "    block {no: 3, offset: 12}\n"
+            "    block {no: 5, offset: 18}\n"
+            "  super block {max: 2, size: 6}\n"
+            "    block {no: 0, offset: 21}\n",
             "check delta");
     }
 
@@ -1366,19 +1078,19 @@ testRun(void)
 
         uint64_t mapSize;
         TEST_ASSIGN(mapSize, pckReadU64P(ioFilterGroupResultP(ioWriteFilterGroup(write), BLOCK_INCR_FILTER_TYPE)), "map size");
-        TEST_RESULT_UINT(mapSize, 11, "map size");
+        TEST_RESULT_UINT(mapSize, 13, "map size");
 
         TEST_RESULT_STR_Z(
             strNewEncode(encodingHex, BUF(bufPtr(destination), bufUsed(destination) - (size_t)mapSize)),
-            "02010201313200",                           // block 0
+            "020031023200",                             // block 0
             "block list");
 
         const Buffer *map = BUF(bufPtr(destination) + (bufUsed(destination) - (size_t)mapSize), (size_t)mapSize);
 
         TEST_RESULT_STR_Z(
-            testBlockDelta(blockMapNewRead(ioBufferReadNewOpen(map), 8), 3, 8),
-            "read {reference: 0, bundleId: 0, offset: 0, size: 7}\n"
-            "  super block {size: 7}\n"
+            testBlockDelta(blockMapNewRead(ioBufferReadNewOpen(map), 3, 8), 3, 8),
+            "read {reference: 0, bundleId: 0, offset: 0, size: 6}\n"
+            "  super block {max: 2, size: 6}\n"
             "    block {no: 0, offset: 0}\n",
             "check delta");
 
@@ -1392,7 +1104,7 @@ testRun(void)
         TEST_RESULT_VOID(
             ioFilterGroupAdd(
                 ioWriteFilterGroup(write),
-                blockIncrNewPack(ioFilterParamList(blockIncrNew(5, 3, 8, 2, 4, 5, NULL, NULL, NULL)))),
+                blockIncrNewPack(ioFilterParamList(blockIncrNew(2, 3, 8, 2, 4, 5, NULL, NULL, NULL)))),
             "block incr");
         TEST_RESULT_VOID(ioWriteOpen(write), "open");
         TEST_RESULT_VOID(ioWrite(write, source), "write");
@@ -1403,21 +1115,21 @@ testRun(void)
 
         TEST_RESULT_STR_Z(
             strNewEncode(encodingHex, BUF(bufPtr(destination), bufUsed(destination) - (size_t)mapSize)),
-            "020041014243020000"                          // block 0
-            "02025801595a020000"                          // block 1
-            "020231013233020000",                         // block 2
+            "02004101424300"                              // block 0
+            "02015801595a00"                              // block 1
+            "02013101323300",                             // block 2
             "block list");
 
         map = BUF(bufPtr(destination) + (bufUsed(destination) - (size_t)mapSize), (size_t)mapSize);
 
         TEST_RESULT_STR_Z(
-            testBlockDelta(blockMapNewRead(ioBufferReadNewOpen(map), 8), 3, 8),
-            "read {reference: 2, bundleId: 4, offset: 5, size: 27}\n"
-            "  super block {size: 9}\n"
+            testBlockDelta(blockMapNewRead(ioBufferReadNewOpen(map), 3, 8), 3, 8),
+            "read {reference: 2, bundleId: 4, offset: 5, size: 21}\n"
+            "  super block {max: 3, size: 7}\n"
             "    block {no: 0, offset: 0}\n"
-            "  super block {size: 9}\n"
+            "  super block {max: 3, size: 7}\n"
             "    block {no: 0, offset: 3}\n"
-            "  super block {size: 9}\n"
+            "  super block {max: 3, size: 7}\n"
             "    block {no: 0, offset: 6}\n",
             "check delta");
 
@@ -1439,27 +1151,27 @@ testRun(void)
         TEST_RESULT_VOID(ioWriteClose(write), "close");
 
         TEST_ASSIGN(mapSize, pckReadU64P(ioFilterGroupResultP(ioWriteFilterGroup(write), BLOCK_INCR_FILTER_TYPE)), "map size");
-        TEST_RESULT_UINT(mapSize, 42, "map size");
+        TEST_RESULT_UINT(mapSize, 44, "map size");
 
         TEST_RESULT_STR_Z(
             strNewEncode(encodingHex, BUF(bufPtr(destination), bufUsed(destination) - (size_t)mapSize)),
-            "0300414302430000"                          // block 0
-            "0307014000",                               // block 3
+            "03004143044300"                            // block 0
+            "02034000",                                 // block 3
             "block list");
 
         map = BUF(bufPtr(destination) + (bufUsed(destination) - (size_t)mapSize), (size_t)mapSize);
 
         TEST_RESULT_STR_Z(
-            testBlockDelta(blockMapNewRead(ioBufferReadNewOpen(map), 8), 3, 8),
-            "read {reference: 3, bundleId: 0, offset: 0, size: 13}\n"
-            "  super block {size: 8}\n"
+            testBlockDelta(blockMapNewRead(ioBufferReadNewOpen(map), 3, 8), 3, 8),
+            "read {reference: 3, bundleId: 0, offset: 0, size: 11}\n"
+            "  super block {max: 3, size: 7}\n"
             "    block {no: 0, offset: 0}\n"
-            "  super block {size: 5}\n"
+            "  super block {max: 1, size: 4}\n"
             "    block {no: 0, offset: 9}\n"
-            "read {reference: 2, bundleId: 4, offset: 14, size: 18}\n"
-            "  super block {size: 9}\n"
+            "read {reference: 2, bundleId: 4, offset: 12, size: 14}\n"
+            "  super block {max: 3, size: 7}\n"
             "    block {no: 0, offset: 3}\n"
-            "  super block {size: 9}\n"
+            "  super block {max: 3, size: 7}\n"
             "    block {no: 0, offset: 6}\n",
             "check delta");
 
@@ -1481,24 +1193,24 @@ testRun(void)
         TEST_RESULT_VOID(ioWriteClose(write), "close");
 
         TEST_ASSIGN(mapSize, pckReadU64P(ioFilterGroupResultP(ioWriteFilterGroup(write), BLOCK_INCR_FILTER_TYPE)), "map size");
-        TEST_RESULT_UINT(mapSize, 33, "map size");
+        TEST_RESULT_UINT(mapSize, 32, "map size");
 
         TEST_RESULT_STR_Z(
             strNewEncode(encodingHex, BUF(bufPtr(destination), bufUsed(destination) - (size_t)mapSize)),
             "020041014243"                              // super block 0 / block 0
-            "01025801595a020000"                        // super block 0 / block 1
-            "020231013233020000",                       // block 2
+            "01015801595a00"                            // super block 0 / block 1
+            "02013101323300",                           // block 2
             "block list");
 
         map = BUF(bufPtr(destination) + (bufUsed(destination) - (size_t)mapSize), (size_t)mapSize);
 
         TEST_RESULT_STR_Z(
-            testBlockDelta(blockMapNewRead(ioBufferReadNewOpen(map), 8), 3, 8),
-            "read {reference: 2, bundleId: 4, offset: 5, size: 24}\n"
-            "  super block {size: 15}\n"
+            testBlockDelta(blockMapNewRead(ioBufferReadNewOpen(map), 3, 8), 3, 8),
+            "read {reference: 2, bundleId: 4, offset: 5, size: 20}\n"
+            "  super block {max: 6, size: 13}\n"
             "    block {no: 0, offset: 0}\n"
             "    block {no: 1, offset: 3}\n"
-            "  super block {size: 9}\n"
+            "  super block {max: 3, size: 7}\n"
             "    block {no: 0, offset: 6}\n",
             "check delta");
 
@@ -2675,13 +2387,6 @@ testRun(void)
         // Replace checksums since they can differ between architectures (e.g. 32/64 bit)
         hrnLogReplaceAdd("\\) checksum [a-f0-9]{40}", "[a-f0-9]{40}$", "SHA1", false);
 
-        // Backup start time epoch.  The idea is to not have backup times (and therefore labels) ever change.  Each backup added
-        // should be separated by 100,000 seconds (1,000,000 after stanza-upgrade) but after the initial assignments this will only
-        // be possible at the beginning and the end, so new backups added in the middle will average the start times of the prior
-        // and next backup to get their start time.  Backups added to the beginning of the test will need to subtract from the
-        // epoch.
-        #define BACKUP_EPOCH                                        1570000000
-
         // -------------------------------------------------------------------------------------------------------------------------
         TEST_TITLE("online 9.5 resume uncompressed full backup");
 
@@ -2750,7 +2455,7 @@ testRun(void)
                         strNewFmt(STORAGE_REPO_BACKUP "/%s/" BACKUP_MANIFEST_FILE INFO_COPY_EXT, strZ(resumeLabel)))));
 
             // Run backup
-            testBackupPqScriptP(PG_VERSION_95, backupTimeStart, .noArchiveCheck = true, .noWal = true);
+            hrnBackupPqScriptP(PG_VERSION_95, backupTimeStart, .noArchiveCheck = true, .noWal = true);
 
             TEST_RESULT_VOID(hrnCmdBackup(), "backup");
 
@@ -2887,7 +2592,7 @@ testRun(void)
             ((Storage *)storageRepoWrite())->pub.interface.feature ^= 1 << storageFeaturePathSync;
 
             // Run backup
-            testBackupPqScriptP(PG_VERSION_95, backupTimeStart);
+            hrnBackupPqScriptP(PG_VERSION_95, backupTimeStart);
             TEST_RESULT_VOID(hrnCmdBackup(), "backup");
 
             // Enable storage features
@@ -3068,7 +2773,7 @@ testRun(void)
                         strNewFmt(STORAGE_REPO_BACKUP "/%s/" BACKUP_MANIFEST_FILE INFO_COPY_EXT, strZ(resumeLabel)))));
 
             // Run backup
-            testBackupPqScriptP(PG_VERSION_95, backupTimeStart);
+            hrnBackupPqScriptP(PG_VERSION_95, backupTimeStart);
             TEST_RESULT_VOID(hrnCmdBackup(), "backup");
 
             // Check log
@@ -3220,7 +2925,7 @@ testRun(void)
             harnessLogLevelSet(logLevelWarn);
 
             // Run backup but error on first archive check
-            testBackupPqScriptP(
+            hrnBackupPqScriptP(
                 PG_VERSION_96, backupTimeStart, .noPriorWal = true, .backupStandby = true, .walCompressType = compressTypeGz);
             TEST_ERROR(
                 hrnCmdBackup(), ArchiveTimeoutError,
@@ -3230,7 +2935,7 @@ testRun(void)
                 "HINT: run the 'start' command if the stanza was previously stopped.");
 
             // Run backup but error on archive check
-            testBackupPqScriptP(
+            hrnBackupPqScriptP(
                 PG_VERSION_96, backupTimeStart, .noWal = true, .backupStandby = true, .walCompressType = compressTypeGz);
             TEST_ERROR(
                 hrnCmdBackup(), ArchiveTimeoutError,
@@ -3251,7 +2956,7 @@ testRun(void)
             const String *archiveInfoContent = strNewBuf(storageGetP(storageNewReadP(storageRepo(), INFO_ARCHIVE_PATH_FILE_STR)));
 
             // Run backup
-            testBackupPqScriptP(PG_VERSION_96, backupTimeStart, .backupStandby = true, .walCompressType = compressTypeGz);
+            hrnBackupPqScriptP(PG_VERSION_96, backupTimeStart, .backupStandby = true, .walCompressType = compressTypeGz);
             TEST_RESULT_VOID(hrnCmdBackup(), "backup");
 
             // Check archive.info/copy timestamp was updated but contents were not
@@ -3425,7 +3130,7 @@ testRun(void)
             ((Storage *)storageRepoWrite())->pub.interface.feature ^= 1 << storageFeatureHardLink;
 
             // Run backup
-            testBackupPqScriptP(PG_VERSION_11, backupTimeStart, .walCompressType = compressTypeGz, .walTotal = 3);
+            hrnBackupPqScriptP(PG_VERSION_11, backupTimeStart, .walCompressType = compressTypeGz, .walTotal = 3);
             TEST_RESULT_VOID(hrnCmdBackup(), "backup");
 
             // Reset storage features
@@ -3551,7 +3256,7 @@ testRun(void)
             HRN_CFG_LOAD(cfgCmdBackup, argList);
 
             // Preserve prior timestamp on pg_control
-            testBackupPqScriptP(PG_VERSION_11, BACKUP_EPOCH + 2300000, .errorAfterStart = true);
+            hrnBackupPqScriptP(PG_VERSION_11, BACKUP_EPOCH + 2300000, .errorAfterStart = true);
             HRN_PG_CONTROL_TIME(storagePg(), backupTimeStart);
 
             // Run backup
@@ -3593,7 +3298,7 @@ testRun(void)
             HRN_CFG_LOAD(cfgCmdBackup, argList);
 
             // Run backup.  Make sure that the timeline selected converts to hexdecimal that can't be interpreted as decimal.
-            testBackupPqScriptP(PG_VERSION_11, backupTimeStart, .timeline = 0x2C, .walTotal = 2);
+            hrnBackupPqScriptP(PG_VERSION_11, backupTimeStart, .timeline = 0x2C, .walTotal = 2);
             TEST_RESULT_VOID(hrnCmdBackup(), "backup");
 
             TEST_RESULT_LOG(
@@ -3732,7 +3437,7 @@ testRun(void)
             HRN_STORAGE_PUT(storagePgWrite(), "bigish.dat", bigish, .timeModified = 1500000001);
 
             // Run backup
-            testBackupPqScriptP(
+            hrnBackupPqScriptP(
                 PG_VERSION_11, backupTimeStart, .walCompressType = compressTypeGz, .walTotal = 2, .pgVersionForce = STRDEF("11"));
             TEST_RESULT_VOID(hrnCmdBackup(), "backup");
 
@@ -3863,7 +3568,7 @@ testRun(void)
             HRN_STORAGE_PUT_EMPTY(storagePgWrite(), "zero", .timeModified = backupTimeStart);
 
             // Run backup
-            testBackupPqScriptP(PG_VERSION_11, backupTimeStart, .walCompressType = compressTypeGz, .walTotal = 2);
+            hrnBackupPqScriptP(PG_VERSION_11, backupTimeStart, .walCompressType = compressTypeGz, .walTotal = 2);
             TEST_RESULT_VOID(hrnCmdBackup(), "backup");
 
             TEST_RESULT_LOG(
@@ -3973,7 +3678,7 @@ testRun(void)
             HRN_STORAGE_PUT(storagePgWrite(), "grow-to-block-incr", file, .timeModified = backupTimeStart);
 
             // Run backup
-            testBackupPqScriptP(PG_VERSION_11, backupTimeStart, .walCompressType = compressTypeGz, .walTotal = 2);
+            hrnBackupPqScriptP(PG_VERSION_11, backupTimeStart, .walCompressType = compressTypeGz, .walTotal = 2);
             TEST_RESULT_VOID(hrnCmdBackup(), "backup");
 
             TEST_RESULT_LOG(
@@ -3984,7 +3689,7 @@ testRun(void)
                 "P01 DETAIL: backup file " TEST_PATH "/pg1/grow-to-block-incr (bundle 1/0, 16.0KB, [PCT]) checksum [SHA1]\n"
                 "P01 DETAIL: backup file " TEST_PATH "/pg1/global/pg_control (bundle 1/16383, 8KB, [PCT]) checksum [SHA1]\n"
                 "P01 DETAIL: backup file " TEST_PATH "/pg1/block-incr-shrink (bundle 1/24575, 16KB, [PCT]) checksum [SHA1]\n"
-                "P01 DETAIL: backup file " TEST_PATH "/pg1/PG_VERSION (bundle 1/40998, 2B, [PCT]) checksum [SHA1]\n"
+                "P01 DETAIL: backup file " TEST_PATH "/pg1/PG_VERSION (bundle 1/40996, 2B, [PCT]) checksum [SHA1]\n"
                 "P00   INFO: execute non-exclusive backup stop and wait for all WAL segments to archive\n"
                 "P00   INFO: backup stop archive = 0000000105DBF06000000001, lsn = 5dbf060/300000\n"
                 "P00 DETAIL: wrote 'backup_label' file returned from backup stop function\n"
@@ -4014,9 +3719,9 @@ testRun(void)
                 ",\"timestamp\":1572800000}\n"
                 "pg_data/backup_label={\"checksum\":\"8e6f41ac87a7514be96260d65bacbffb11be77dc\",\"size\":17"
                 ",\"timestamp\":1572800002}\n"
-                "pg_data/block-incr-grow={\"bi\":1,\"bim\":26,\"checksum\":\"ebdd38b69cd5b9f2d00d273c981e16960fbbb4f7\""
+                "pg_data/block-incr-grow={\"bi\":1,\"bim\":24,\"checksum\":\"ebdd38b69cd5b9f2d00d273c981e16960fbbb4f7\""
                 ",\"size\":24576,\"timestamp\":1572800000}\n"
-                "pg_data/block-incr-shrink={\"bi\":1,\"bim\":30,\"checksum\":\"ce5f8864058b1bb274244b512cb9641355987134\""
+                "pg_data/block-incr-shrink={\"bi\":1,\"bim\":29,\"checksum\":\"ce5f8864058b1bb274244b512cb9641355987134\""
                 ",\"size\":16385,\"timestamp\":1572800000}\n"
                 "pg_data/global/pg_control={\"size\":8192,\"timestamp\":1572800000}\n"
                 "pg_data/grow-to-block-incr={\"checksum\":\"f5a5c308cf5fcb52bccebe2365f8ed56acbcc41d\",\"size\":16383"
@@ -4084,7 +3789,7 @@ testRun(void)
             HRN_STORAGE_PUT(storagePgWrite(), "grow-to-block-incr", file, .timeModified = backupTimeStart);
 
             // Run backup
-            testBackupPqScriptP(PG_VERSION_11, backupTimeStart, .walCompressType = compressTypeGz, .walTotal = 2);
+            hrnBackupPqScriptP(PG_VERSION_11, backupTimeStart, .walCompressType = compressTypeGz, .walTotal = 2);
             TEST_RESULT_VOID(hrnCmdBackup(), "backup");
 
             TEST_RESULT_LOG(
@@ -4095,8 +3800,8 @@ testRun(void)
                 "P01 DETAIL: backup file " TEST_PATH "/pg1/block-incr-larger (1.4MB, [PCT]) checksum [SHA1]\n"
                 "P01 DETAIL: backup file " TEST_PATH "/pg1/block-incr-grow (128KB, [PCT]) checksum [SHA1]\n"
                 "P01 DETAIL: backup file " TEST_PATH "/pg1/grow-to-block-incr (bundle 1/0, 16KB, [PCT]) checksum [SHA1]\n"
-                "P01 DETAIL: backup file " TEST_PATH "/pg1/global/pg_control (bundle 1/16420, 8KB, [PCT]) checksum [SHA1]\n"
-                "P01 DETAIL: backup file " TEST_PATH "/pg1/block-incr-shrink (bundle 1/24612, 16.0KB, [PCT]) checksum [SHA1]\n"
+                "P01 DETAIL: backup file " TEST_PATH "/pg1/global/pg_control (bundle 1/16418, 8KB, [PCT]) checksum [SHA1]\n"
+                "P01 DETAIL: backup file " TEST_PATH "/pg1/block-incr-shrink (bundle 1/24610, 16.0KB, [PCT]) checksum [SHA1]\n"
                 "P00 DETAIL: reference pg_data/PG_VERSION to 20191103-165320F\n"
                 "P00   INFO: execute non-exclusive backup stop and wait for all WAL segments to archive\n"
                 "P00   INFO: backup stop archive = 0000000105DC213000000001, lsn = 5dc2130/300000\n"
@@ -4127,14 +3832,14 @@ testRun(void)
                 ",\"size\":2,\"timestamp\":1572800000}\n"
                 "pg_data/backup_label={\"checksum\":\"8e6f41ac87a7514be96260d65bacbffb11be77dc\",\"size\":17"
                 ",\"timestamp\":1573000002}\n"
-                "pg_data/block-incr-grow={\"bi\":1,\"bim\":123,\"checksum\":\"1ddde8db92dd9019be0819ae4f9ad9cea2fae399\""
+                "pg_data/block-incr-grow={\"bi\":1,\"bim\":114,\"checksum\":\"1ddde8db92dd9019be0819ae4f9ad9cea2fae399\""
                 ",\"size\":131072,\"timestamp\":1573000000}\n"
-                "pg_data/block-incr-larger={\"bi\":8,\"bic\":7,\"bim\":194"
+                "pg_data/block-incr-larger={\"bi\":8,\"bic\":7,\"bim\":173"
                 ",\"checksum\":\"eec53a6da79c00b3c658a7e09f44b3e9efefd960\",\"size\":1507328,\"timestamp\":1573000000}\n"
                 "pg_data/block-incr-shrink={\"checksum\":\"1c6a17f67562d8b3f64f1b5f2ee592a4c2809b3b\",\"size\":16383"
                 ",\"timestamp\":1573000000}\n"
                 "pg_data/global/pg_control={\"size\":8192,\"timestamp\":1573000000}\n"
-                "pg_data/grow-to-block-incr={\"bi\":1,\"bim\":27,\"checksum\":\"4f560611d9dc9212432970e5c4bec15d876c226e\","
+                "pg_data/grow-to-block-incr={\"bi\":1,\"bim\":26,\"checksum\":\"4f560611d9dc9212432970e5c4bec15d876c226e\","
                 "\"size\":16385,\"timestamp\":1573000000}\n"
                 "pg_data/tablespace_map={\"checksum\":\"87fe624d7976c2144e10afcb7a9a49b071f35e9c\",\"size\":19"
                 ",\"timestamp\":1573000002}\n"
@@ -4198,7 +3903,7 @@ testRun(void)
             HRN_STORAGE_PUT(storagePgWrite(), "block-incr-grow", file, .timeModified = backupTimeStart);
 
             // Run backup
-            testBackupPqScriptP(
+            hrnBackupPqScriptP(
                 PG_VERSION_11, backupTimeStart, .walCompressType = compressTypeNone, .cipherType = cipherTypeAes256Cbc,
                 .cipherPass = TEST_CIPHER_PASS, .walTotal = 2);
             TEST_RESULT_VOID(hrnCmdBackup(), "backup");
@@ -4290,7 +3995,7 @@ testRun(void)
             HRN_STORAGE_PUT(storagePgWrite(), "block-age-multiplier", file, .timeModified = backupTimeStart - SEC_PER_DAY);
 
             // Run backup
-            testBackupPqScriptP(
+            hrnBackupPqScriptP(
                 PG_VERSION_11, backupTimeStart, .walCompressType = compressTypeNone, .cipherType = cipherTypeAes256Cbc,
                 .cipherPass = TEST_CIPHER_PASS, .walTotal = 2);
             TEST_RESULT_VOID(hrnCmdBackup(), "backup");
