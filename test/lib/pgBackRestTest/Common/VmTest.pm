@@ -101,6 +101,26 @@ use constant VM4                                                    => VM_U22;
 use constant VM_LIST                                                => (VM2, VM3, VM4);
     push @EXPORT, qw(VM_LIST);
 
+# FOR U16 BUILD:
+#   sudo rm -rf /home/vagrant/test/*
+#   sudo rm -rf /home/vagrant/pgbackrest/test/result
+#   pgbackrest/test/test.pl --vm-build --vm=u16
+#   pgbackrest/test/test.pl --build-package --build-only --vm=u16
+#   docker exec -i test-build bash -c 'apt-get update && apt-get install -y cpanminus fakeroot && cpanm install YAML::XS'
+#   echo '10' > pgbackrest/test/result/package/u16/debian/compat
+#   docker exec -i test-build bash -c 'cd /home/vagrant/pgbackrest/test/result/package/u16 && debuild -d -i -us -uc -b'
+#   scp pgbackrest/test/result/package/? root@backup.thelabyrinth.net:.
+#   scp pgbackrest/test/result/package/? root@mail.thelabyrinth.net:.
+#
+# FOR U18 BUILD (change compat to 12):
+#   sudo rm -rf /home/vagrant/test/*
+#   sudo rm -rf /home/vagrant/pgbackrest/test/result
+#   pgbackrest/test/test.pl --vm-build --vm=u18
+#   pgbackrest/test/test.pl --build-package --build-only --vm=u18
+#   vi pgbackrest/test/result/package/u18/debian/control (change compat to 12)
+#   docker exec -i test-build bash -c 'cd /home/vagrant/pgbackrest/test/result/package/u18 && debuild -d -i -us -uc -b'
+#   scp pgbackrest/test/result/package/? root@www.thelabyrinth.net:.
+
 my $oyVm =
 {
     # None
