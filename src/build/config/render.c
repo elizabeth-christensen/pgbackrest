@@ -711,6 +711,9 @@ bldCfgRenderParseAutoC(const Storage *const storageRepo, const BldCfg bldCfg, co
             "        PARSE_RULE_OPTION_TYPE(%s),\n",
             strZ(opt->name), strZ(bldEnum("cfgOptType", opt->type)));
 
+        if (opt->beta)
+            strCatZ(configOpt, "        PARSE_RULE_OPTION_BETA(true),\n");
+
         if (opt->negate)
             strCatZ(configOpt, "        PARSE_RULE_OPTION_NEGATE(true),\n");
 
@@ -1037,16 +1040,15 @@ bldCfgRenderParseAutoC(const Storage *const storageRepo, const BldCfg bldCfg, co
             for (unsigned int deprecateIdx = 0; deprecateIdx < lstSize(opt->deprecateList); deprecateIdx++)
             {
                 const BldCfgOptionDeprecate *const deprecate = lstGet(opt->deprecateList, deprecateIdx);
+                const BldCfgRenderOptionDeprecate bldCfgRenderOptionDeprecate =
+                {
+                    .name = deprecate->name,
+                    .option = opt,
+                    .indexed = deprecate->indexed,
+                    .unindexed = deprecate->unindexed,
+                };
 
-                lstAdd(
-                    deprecateCombineList,
-                    &(BldCfgRenderOptionDeprecate)
-                    {
-                        .name = deprecate->name,
-                        .option = opt,
-                        .indexed = deprecate->indexed,
-                        .unindexed = deprecate->unindexed,
-                    });
+                lstAdd(deprecateCombineList, &bldCfgRenderOptionDeprecate);
             }
         }
     }

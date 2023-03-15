@@ -3,10 +3,10 @@ Backup Info Handler
 ***********************************************************************************************************************************/
 #include "build.auto.h"
 
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-#include <inttypes.h>
 
 #include "command/backup/common.h"
 #include "common/crypto/cipherBlock.h"
@@ -150,7 +150,6 @@ infoBackupLoadCallback(void *data, const String *section, const String *key, con
             InfoBackupData info =
             {
                 .backupLabel = strDup(key),
-
             };
 
             // Format and version
@@ -457,7 +456,7 @@ infoBackupDataAdd(const InfoBackup *this, const Manifest *manifest)
                 .backupInfoSizeDelta = backupSizeDelta,
                 .backupPgId = manData->pgId,
                 .backupTimestampStart = manData->backupTimestampStart,
-                .backupTimestampStop= manData->backupTimestampStop,
+                .backupTimestampStop = manData->backupTimestampStop,
                 .backupType = manData->backupType,
                 .backupError = varNewBool(backupError),
 
@@ -470,8 +469,8 @@ infoBackupDataAdd(const InfoBackup *this, const Manifest *manifest)
                 .optionArchiveCheck = manData->backupOptionArchiveCheck,
                 .optionArchiveCopy = manData->backupOptionArchiveCopy,
                 .optionBackupStandby = manData->backupOptionStandby != NULL ? varBool(manData->backupOptionStandby) : false,
-                .optionChecksumPage = manData->backupOptionChecksumPage != NULL ?
-                    varBool(manData->backupOptionChecksumPage) : false,
+                .optionChecksumPage =
+                    manData->backupOptionChecksumPage != NULL ? varBool(manData->backupOptionChecksumPage) : false,
                 .optionCompress = manData->backupOptionCompressType != compressTypeNone,
                 .optionHardlink = manData->backupOptionHardLink,
                 .optionOnline = manData->backupOptionOnline,

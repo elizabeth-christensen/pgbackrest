@@ -1,11 +1,11 @@
 /***********************************************************************************************************************************
-Restore Delta Map
+Block Hash List
 ***********************************************************************************************************************************/
 #include "build.auto.h"
 
-#include "command/restore/deltaMap.h"
+#include "command/restore/blockChecksum.h"
 #include "common/crypto/common.h"
-#include "common/crypto/hash.h"
+#include "common/crypto/xxhash.h"
 #include "common/debug.h"
 #include "common/log.h"
 #include "common/type/object.h"
@@ -13,34 +13,35 @@ Restore Delta Map
 /***********************************************************************************************************************************
 Object type
 ***********************************************************************************************************************************/
-typedef struct DeltaMap
+typedef struct BlockChecksum
 {
     MemContext *memContext;                                         // Mem context of filter
 
     size_t blockSize;                                               // Block size for checksums
+    size_t checksumSize;                                            // Checksum size
     size_t blockCurrent;                                            // Size of current block
-    IoFilter *hash;                                                 // Hash of current block
-    List *list;                                                     // List if hashes
-} DeltaMap;
+    IoFilter *checksum;                                             // Checksum of current block
+    List *list;                                                     // List of checksums
+} BlockChecksum;
 
 /***********************************************************************************************************************************
 Macros for function logging
 ***********************************************************************************************************************************/
-#define FUNCTION_LOG_DELTA_MAP_TYPE                                                                                                \
-    DeltaMap *
-#define FUNCTION_LOG_DELTA_MAP_FORMAT(value, buffer, bufferSize)                                                                   \
-    objNameToLog(value, "DeltaMap", buffer, bufferSize)
+#define FUNCTION_LOG_BLOCK_CHECKSUM_TYPE                                                                                           \
+    BlockChecksum *
+#define FUNCTION_LOG_BLOCK_CHECKSUM_FORMAT(value, buffer, bufferSize)                                                              \
+    objNameToLog(value, "BlockChecksum", buffer, bufferSize)
 
 /***********************************************************************************************************************************
-Process delta
+Generate block checksum list
 ***********************************************************************************************************************************/
 static void
-deltaMapProcess(THIS_VOID, const Buffer *const input)
+blockChecksumProcess(THIS_VOID, const Buffer *const input)
 {
-    THIS(DeltaMap);
+    THIS(BlockChecksum);
 
     FUNCTION_LOG_BEGIN(logLevelTrace);
-        FUNCTION_LOG_PARAM(DELTA_MAP, this);
+        FUNCTION_LOG_PARAM(BLOCK_CHECKSUM, this);
         FUNCTION_LOG_PARAM(BUFFER, input);
     FUNCTION_LOG_END();
 
@@ -52,37 +53,37 @@ deltaMapProcess(THIS_VOID, const Buffer *const input)
     // Loop until input is consumed
     while (inputOffset != bufUsed(input))
     {
-        // Create hash object if needed
-        if (this->hash == NULL)
+        // Create checksum object if needed
+        if (this->checksum == NULL)
         {
             MEM_CONTEXT_BEGIN(this->memContext)
             {
-                this->hash = cryptoHashNew(hashTypeSha1);
+                this->checksum = xxHashNew(this->checksumSize);
                 this->blockCurrent = 0;
             }
             MEM_CONTEXT_END();
         }
 
-        // Calculate how much data to hash and perform hash
+        // Calculate how much data to checksum and perform checksum
         const size_t blockRemains = this->blockSize - this->blockCurrent;
         const size_t inputRemains = bufUsed(input) - inputOffset;
-        const size_t blockHash = blockRemains < inputRemains ? blockRemains : inputRemains;
+        const size_t blockChecksumSize = blockRemains < inputRemains ? blockRemains : inputRemains;
 
-        ioFilterProcessIn(this->hash, BUF(bufPtrConst(input) + inputOffset, blockHash));
+        ioFilterProcessIn(this->checksum, BUF(bufPtrConst(input) + inputOffset, blockChecksumSize));
 
-        // Update amount of data hashed
-        inputOffset += blockHash;
-        this->blockCurrent += blockHash;
+        // Update amount of data checksummed
+        inputOffset += blockChecksumSize;
+        this->blockCurrent += blockChecksumSize;
 
-        // If the block size has been reached then output the hash
+        // If the block size has been reached then output the checksum
         if (this->blockCurrent == this->blockSize)
         {
             MEM_CONTEXT_TEMP_BEGIN()
             {
-                lstAdd(this->list, bufPtrConst(pckReadBinP(pckReadNew(ioFilterResult(this->hash)))));
+                lstAdd(this->list, bufPtrConst(pckReadBinP(pckReadNew(ioFilterResult(this->checksum)))));
 
-                ioFilterFree(this->hash);
-                this->hash = NULL;
+                ioFilterFree(this->checksum);
+                this->checksum = NULL;
             }
             MEM_CONTEXT_TEMP_END();
         }
@@ -92,15 +93,15 @@ deltaMapProcess(THIS_VOID, const Buffer *const input)
 }
 
 /***********************************************************************************************************************************
-Get a binary representation of the hash list
+Get a binary representation of the checksum list
 ***********************************************************************************************************************************/
 static Pack *
-deltaMapResult(THIS_VOID)
+blockChecksumResult(THIS_VOID)
 {
-    THIS(DeltaMap);
+    THIS(BlockChecksum);
 
     FUNCTION_LOG_BEGIN(logLevelTrace);
-        FUNCTION_LOG_PARAM(DELTA_MAP, this);
+        FUNCTION_LOG_PARAM(BLOCK_CHECKSUM, this);
     FUNCTION_LOG_END();
 
     ASSERT(this != NULL);
@@ -111,11 +112,11 @@ deltaMapResult(THIS_VOID)
     {
         PackWrite *const packWrite = pckWriteNewP();
 
-        // If there is a remainder in the hash
-        if (this->hash)
-            lstAdd(this->list, bufPtrConst(pckReadBinP(pckReadNew(ioFilterResult(this->hash)))));
+        // If there is a remainder in the checksum
+        if (this->checksum)
+            lstAdd(this->list, bufPtrConst(pckReadBinP(pckReadNew(ioFilterResult(this->checksum)))));
 
-        pckWriteBinP(packWrite, BUF(lstGet(this->list, 0), lstSize(this->list) * HASH_TYPE_SHA1_SIZE));
+        pckWriteBinP(packWrite, BUF(lstGet(this->list, 0), lstSize(this->list) * this->checksumSize));
         pckWriteEndP(packWrite);
 
         result = pckMove(pckWriteResult(packWrite), memContextPrior());
@@ -127,10 +128,11 @@ deltaMapResult(THIS_VOID)
 
 /**********************************************************************************************************************************/
 FN_EXTERN IoFilter *
-deltaMapNew(const size_t blockSize)
+blockChecksumNew(const size_t blockSize, const size_t checksumSize)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
         FUNCTION_LOG_PARAM(SIZE, blockSize);
+        FUNCTION_LOG_PARAM(SIZE, checksumSize);
     FUNCTION_LOG_END();
 
     ASSERT(blockSize != 0);
@@ -138,33 +140,19 @@ deltaMapNew(const size_t blockSize)
     // Allocate memory to hold process state
     IoFilter *this = NULL;
 
-    OBJ_NEW_BEGIN(DeltaMap, .childQty = MEM_CONTEXT_QTY_MAX, .allocQty = MEM_CONTEXT_QTY_MAX, .callbackQty = 1)
+    OBJ_NEW_BEGIN(BlockChecksum, .childQty = MEM_CONTEXT_QTY_MAX, .allocQty = MEM_CONTEXT_QTY_MAX, .callbackQty = 1)
     {
-        DeltaMap *const driver = OBJ_NAME(OBJ_NEW_ALLOC(), IoFilter::DeltaMap);
+        BlockChecksum *const driver = OBJ_NAME(OBJ_NEW_ALLOC(), IoFilter::BlockChecksum);
 
-        *driver = (DeltaMap)
+        *driver = (BlockChecksum)
         {
             .memContext = memContextCurrent(),
             .blockSize = blockSize,
-            .list = lstNewP(HASH_TYPE_SHA1_SIZE),
+            .checksumSize = checksumSize,
+            .list = lstNewP(checksumSize),
         };
 
-        // Create param list
-        Pack *paramList = NULL;
-
-        MEM_CONTEXT_TEMP_BEGIN()
-        {
-            PackWrite *const packWrite = pckWriteNewP();
-
-            pckWriteU64P(packWrite, blockSize);
-            pckWriteEndP(packWrite);
-
-            paramList = pckMove(pckWriteResult(packWrite), memContextPrior());
-        }
-        MEM_CONTEXT_TEMP_END();
-
-        this = ioFilterNewP(
-            DELTA_MAP_FILTER_TYPE, driver, paramList, .in = deltaMapProcess, .result = deltaMapResult);
+        this = ioFilterNewP(BLOCK_CHECKSUM_FILTER_TYPE, driver, NULL, .in = blockChecksumProcess, .result = blockChecksumResult);
     }
     OBJ_NEW_END();
 

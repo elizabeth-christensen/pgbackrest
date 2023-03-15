@@ -22,27 +22,27 @@ Defines for various Postgres paths and files
 #define PG_FILE_PGFILENODEMAP                                       "pg_filenode.map"
 #define PG_FILE_PGINTERNALINIT                                      "pg_internal.init"
 #define PG_FILE_PGVERSION                                           "PG_VERSION"
-    STRING_DECLARE(PG_FILE_PGVERSION_STR);
+STRING_DECLARE(PG_FILE_PGVERSION_STR);
 #define PG_FILE_POSTGRESQLAUTOCONF                                  "postgresql.auto.conf"
-    STRING_DECLARE(PG_FILE_POSTGRESQLAUTOCONF_STR);
+STRING_DECLARE(PG_FILE_POSTGRESQLAUTOCONF_STR);
 #define PG_FILE_POSTGRESQLAUTOCONFTMP                               "postgresql.auto.conf.tmp"
 #define PG_FILE_POSTMTROPTS                                         "postmas""ter.opts"
 #define PG_FILE_POSTMTRPID                                          "postmas""ter.pid"
-    STRING_DECLARE(PG_FILE_POSTMTRPID_STR);
+STRING_DECLARE(PG_FILE_POSTMTRPID_STR);
 #define PG_FILE_RECOVERYCONF                                        "recovery.conf"
-    STRING_DECLARE(PG_FILE_RECOVERYCONF_STR);
+STRING_DECLARE(PG_FILE_RECOVERYCONF_STR);
 #define PG_FILE_RECOVERYDONE                                        "recovery.done"
-    STRING_DECLARE(PG_FILE_RECOVERYDONE_STR);
+STRING_DECLARE(PG_FILE_RECOVERYDONE_STR);
 #define PG_FILE_RECOVERYSIGNAL                                      "recovery.signal"
-    STRING_DECLARE(PG_FILE_RECOVERYSIGNAL_STR);
+STRING_DECLARE(PG_FILE_RECOVERYSIGNAL_STR);
 #define PG_FILE_STANDBYSIGNAL                                       "standby.signal"
-    STRING_DECLARE(PG_FILE_STANDBYSIGNAL_STR);
+STRING_DECLARE(PG_FILE_STANDBYSIGNAL_STR);
 #define PG_FILE_TABLESPACEMAP                                       "tablespace_map"
 
 #define PG_PATH_ARCHIVE_STATUS                                      "archive_status"
 #define PG_PATH_BASE                                                "base"
 #define PG_PATH_GLOBAL                                              "global"
-    STRING_DECLARE(PG_PATH_GLOBAL_STR);
+STRING_DECLARE(PG_PATH_GLOBAL_STR);
 #define PG_PATH_PGMULTIXACT                                         "pg_multixact"
 #define PG_PATH_PGDYNSHMEM                                          "pg_dynshmem"
 #define PG_PATH_PGNOTIFY                                            "pg_notify"
@@ -56,9 +56,9 @@ Defines for various Postgres paths and files
 #define PG_PREFIX_PGSQLTMP                                          "pgsql_tmp"
 
 #define PG_NAME_WAL                                                 "wal"
-    STRING_DECLARE(PG_NAME_WAL_STR);
+STRING_DECLARE(PG_NAME_WAL_STR);
 #define PG_NAME_XLOG                                                "xlog"
-    STRING_DECLARE(PG_NAME_XLOG_STR);
+STRING_DECLARE(PG_NAME_XLOG_STR);
 
 /***********************************************************************************************************************************
 Define default page size
@@ -130,7 +130,7 @@ FN_EXTERN bool pgDbIsSystem(const String *name);
 FN_EXTERN bool pgDbIsSystemId(unsigned int id);
 
 // Get info from pg_control
-FN_EXTERN PgControl pgControlFromFile(const Storage *storage);
+FN_EXTERN PgControl pgControlFromFile(const Storage *storage, const String *pgVersionForce);
 
 // Get the control version for a PostgreSQL version
 FN_EXTERN uint32_t pgControlVersion(unsigned int pgVersion);
@@ -140,8 +140,8 @@ FN_EXTERN unsigned int pgVersionFromStr(const String *version);
 FN_EXTERN String *pgVersionToStr(unsigned int version);
 
 // Get info from WAL header
-FN_EXTERN PgWal pgWalFromFile(const String *walFile, const Storage *storage);
-FN_EXTERN PgWal pgWalFromBuffer(const Buffer *walBuffer);
+FN_EXTERN PgWal pgWalFromFile(const String *walFile, const Storage *storage, const String *pgVersionForce);
+FN_EXTERN PgWal pgWalFromBuffer(const Buffer *walBuffer, const String *pgVersionForce);
 
 // Get the tablespace identifier used to distinguish versions in a tablespace directory, e.g. PG_15_202209061
 FN_EXTERN String *pgTablespaceId(unsigned int pgVersion, unsigned int pgCatalogVersion);

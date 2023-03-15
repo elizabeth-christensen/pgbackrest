@@ -13,9 +13,9 @@ Remote Storage Read
 #include "common/log.h"
 #include "common/type/convert.h"
 #include "common/type/object.h"
+#include "storage/read.intern.h"
 #include "storage/remote/protocol.h"
 #include "storage/remote/read.h"
-#include "storage/read.intern.h"
 
 /***********************************************************************************************************************************
 Object type
@@ -217,7 +217,8 @@ storageReadRemoteOpen(THIS_VOID)
         if (this->interface.compressible)
         {
             ioFilterGroupAdd(
-                ioReadFilterGroup(storageReadIo(this->read)), compressFilter(compressTypeGz, (int)this->interface.compressLevel));
+                ioReadFilterGroup(storageReadIo(this->read)),
+                compressFilterP(compressTypeGz, (int)this->interface.compressLevel, .raw = true));
         }
 
         ProtocolCommand *command = protocolCommandNew(PROTOCOL_COMMAND_STORAGE_OPEN_READ);
@@ -246,7 +247,7 @@ storageReadRemoteOpen(THIS_VOID)
 
             // If the file is compressible add decompression filter locally
             if (this->interface.compressible)
-                ioFilterGroupAdd(ioReadFilterGroup(storageReadIo(this->read)), decompressFilter(compressTypeGz));
+                ioFilterGroupAdd(ioReadFilterGroup(storageReadIo(this->read)), decompressFilterP(compressTypeGz, .raw = true));
 
             // Set free callback to ensure the protocol is cleared on a short read
             memContextCallbackSet(objMemContext(this), storageReadRemoteFreeResource, this);

@@ -287,8 +287,8 @@ dbOpen(Db *this)
                 THROW(
                     DbQueryError,
                     "unable to select some rows from pg_settings\n"
-                        "HINT: is the backup running as the postgres user?\n"
-                        "HINT: is the pg_read_all_settings role assigned for " PG_NAME " >= " PG_VERSION_10_STR "?");
+                    "HINT: is the backup running as the postgres user?\n"
+                    "HINT: is the pg_read_all_settings role assigned for " PG_NAME " >= " PG_VERSION_10_STR "?");
             }
         }
 
@@ -323,7 +323,7 @@ dbOpen(Db *this)
         this->pub.standby = dbIsInRecovery(this);
 
         // Get control file
-        this->pub.pgControl = pgControlFromFile(this->storage);
+        this->pub.pgControl = pgControlFromFile(this->storage, cfgOptionStrNull(cfgOptPgVersionForce));
     }
     MEM_CONTEXT_TEMP_END();
 
@@ -418,7 +418,7 @@ dbBackupStart(Db *const this, const bool startFast, const bool stopAuto, const b
         {
             LOG_WARN_FMT(
                 CFGOPT_START_FAST " is disabled and " CFGOPT_DB_TIMEOUT " (%" PRIu64 "s) is smaller than the " PG_NAME
-                    " checkpoint_timeout (%" PRIu64 "s) - timeout may occur before the backup starts",
+                " checkpoint_timeout (%" PRIu64 "s) - timeout may occur before the backup starts",
                 dbDbTimeout(this) / MSEC_PER_SEC, dbCheckpointTimeout(this) / MSEC_PER_SEC);
         }
 
@@ -441,7 +441,7 @@ dbBackupStart(Db *const this, const bool startFast, const bool stopAuto, const b
 
         // Make sure the backup start checkpoint was written to pg_control. This helps ensure that we have a consistent view of the
         // storage with PostgreSQL.
-        const PgControl pgControl = pgControlFromFile(this->storage);
+        const PgControl pgControl = pgControlFromFile(this->storage, cfgOptionStrNull(cfgOptPgVersionForce));
         const String *const lsnStart = pckReadStrP(read);
 
         if (pgControl.checkpoint < pgLsnFromStr(lsnStart))
@@ -597,7 +597,7 @@ dbList(Db *this)
             this, pgClientQueryResultAny,
             STRDEF(
                 "select oid::oid, datname::text, (select oid::oid from pg_catalog.pg_database where datname = 'template0')"
-                    " as datlastsysoid from pg_catalog.pg_database")));
+                " as datlastsysoid from pg_catalog.pg_database")));
 }
 
 /**********************************************************************************************************************************/
@@ -618,7 +618,6 @@ dbReplayWait(Db *const this, const String *const targetLsn, const uint32_t targe
 
     MEM_CONTEXT_TEMP_BEGIN()
     {
-
         // Standby checkpoint before the backup started must be <= the target LSN. If not, it indicates that the standby was ahead
         // of the primary and cannot be following it.
         if (dbPgControl(this).checkpoint > pgLsnFromStr(targetLsn))
@@ -734,7 +733,7 @@ dbReplayWait(Db *const this, const String *const targetLsn, const uint32_t targe
         }
 
         // Reload pg_control in case timeline was updated by the checkpoint
-        this->pub.pgControl = pgControlFromFile(this->storage);
+        this->pub.pgControl = pgControlFromFile(this->storage, cfgOptionStrNull(cfgOptPgVersionForce));
 
         // Check that the timeline matches the primary
         if (dbPgControl(this).timeline != targetTimeline)

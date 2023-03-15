@@ -3,8 +3,8 @@ BZ2 Decompress
 ***********************************************************************************************************************************/
 #include "build.auto.h"
 
-#include <stdio.h>
 #include <bzlib.h>
+#include <stdio.h>
 
 #include "common/compress/bz2/common.h"
 #include "common/compress/bz2/decompress.h"
@@ -144,9 +144,11 @@ bz2DecompressInputSame(const THIS_VOID)
 
 /**********************************************************************************************************************************/
 FN_EXTERN IoFilter *
-bz2DecompressNew(void)
+bz2DecompressNew(const bool raw)
 {
-    FUNCTION_LOG_VOID(logLevelTrace);
+    FUNCTION_LOG_BEGIN(logLevelTrace);
+        (void)raw;                                                  // Raw unsupported
+    FUNCTION_LOG_END();
 
     IoFilter *this = NULL;
 

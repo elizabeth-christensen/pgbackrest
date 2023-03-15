@@ -5,8 +5,8 @@ LZ4 Decompress
 
 #ifdef HAVE_LIBLZ4
 
-#include <stdio.h>
 #include <lz4frame.h>
+#include <stdio.h>
 
 #include "common/compress/lz4/common.h"
 #include "common/compress/lz4/decompress.h"
@@ -157,9 +157,11 @@ lz4DecompressInputSame(const THIS_VOID)
 
 /**********************************************************************************************************************************/
 FN_EXTERN IoFilter *
-lz4DecompressNew(void)
+lz4DecompressNew(const bool raw)
 {
-    FUNCTION_LOG_VOID(logLevelTrace);
+    FUNCTION_LOG_BEGIN(logLevelTrace);
+        (void)raw;                                                  // Not required for decompress
+    FUNCTION_LOG_END();
 
     IoFilter *this = NULL;
 

@@ -11,15 +11,15 @@ stress testing as needed.
 #include "common/harnessFork.h"
 #include "common/harnessStorage.h"
 
-#include "common/crypto/hash.h"
 #include "common/compress/gz/compress.h"
 #include "common/compress/lz4/compress.h"
-#include "common/io/filter/filter.h"
-#include "common/io/filter/sink.h"
+#include "common/crypto/hash.h"
 #include "common/io/bufferRead.h"
 #include "common/io/bufferWrite.h"
 #include "common/io/fdRead.h"
 #include "common/io/fdWrite.h"
+#include "common/io/filter/filter.h"
+#include "common/io/filter/sink.h"
 #include "common/io/io.h"
 #include "common/type/object.h"
 #include "protocol/client.h"
@@ -40,7 +40,10 @@ static StorageList *
 storageTestPerfList(THIS_VOID, const String *path, StorageInfoLevel level, StorageInterfaceListParam param)
 {
     THIS(StorageTestPerfList);
-    (void)path; (void)level; (void)param;
+
+    (void)path;
+    (void)level;
+    (void)param;
 
     StorageList *result = NULL;
 
@@ -142,15 +145,23 @@ testRun(void)
                 HRN_CFG_LOAD(cfgCmdArchivePush, argList, .role = cfgCmdRoleRemote);
 
                 // Create a driver to test remote performance of storageNewItrP() and inject it into storageRepo()
-                StorageTestPerfList driver =
+                StorageTestPerfList *driver = NULL;
+
+                OBJ_NEW_BEGIN(StorageTestPerfList, .childQty = MEM_CONTEXT_QTY_MAX)
                 {
-                    .interface = storageInterfaceTestDummy,
-                    .fileTotal = fileTotal,
-                };
+                    driver = OBJ_NEW_ALLOC();
 
-                driver.interface.list = storageTestPerfList;
+                    *driver = (StorageTestPerfList)
+                    {
+                        .interface = storageInterfaceTestDummy,
+                        .fileTotal = fileTotal,
+                    };
+                }
+                OBJ_NEW_END();
 
-                Storage *storageTest = storageNew(strIdFromZ("test"), STRDEF("/"), 0, 0, false, NULL, &driver, driver.interface);
+                driver->interface.list = storageTestPerfList;
+
+                Storage *storageTest = storageNew(strIdFromZ("test"), STRDEF("/"), 0, 0, false, NULL, driver, driver->interface);
                 storageHelper.storageRepoWrite = memNew(sizeof(Storage *));
                 storageHelper.storageRepoWrite[0] = storageTest;
 
@@ -323,7 +334,7 @@ testRun(void)
             MEM_CONTEXT_TEMP_BEGIN()
             {
                 BENCHMARK_BEGIN();
-                BENCHMARK_FILTER_ADD(gzCompressNew(6));
+                BENCHMARK_FILTER_ADD(gzCompressNew(6, false));
                 BENCHMARK_END(gzip6Total);
             }
             MEM_CONTEXT_TEMP_END();
@@ -335,7 +346,7 @@ testRun(void)
             MEM_CONTEXT_TEMP_BEGIN()
             {
                 BENCHMARK_BEGIN();
-                BENCHMARK_FILTER_ADD(lz4CompressNew(1));
+                BENCHMARK_FILTER_ADD(lz4CompressNew(1, false));
                 BENCHMARK_END(lz41Total);
             }
             MEM_CONTEXT_TEMP_END();

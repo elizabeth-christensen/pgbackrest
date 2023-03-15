@@ -17,6 +17,7 @@ Command constants
 #define CFGCMD_EXPIRE                                               "expire"
 #define CFGCMD_HELP                                                 "help"
 #define CFGCMD_INFO                                                 "info"
+#define CFGCMD_MANIFEST                                             "manifest"
 #define CFGCMD_REPO_CREATE                                          "repo-create"
 #define CFGCMD_REPO_GET                                             "repo-get"
 #define CFGCMD_REPO_LS                                              "repo-ls"
@@ -33,7 +34,7 @@ Command constants
 #define CFGCMD_VERIFY                                               "verify"
 #define CFGCMD_VERSION                                              "version"
 
-#define CFG_COMMAND_TOTAL                                           23
+#define CFG_COMMAND_TOTAL                                           24
 
 /***********************************************************************************************************************************
 Option group constants
@@ -55,6 +56,7 @@ Option constants
 #define CFGOPT_ARCHIVE_PUSH_QUEUE_MAX                               "archive-push-queue-max"
 #define CFGOPT_ARCHIVE_TIMEOUT                                      "archive-timeout"
 #define CFGOPT_BACKUP_STANDBY                                       "backup-standby"
+#define CFGOPT_BETA                                                 "beta"
 #define CFGOPT_BUFFER_SIZE                                          "buffer-size"
 #define CFGOPT_CHECKSUM_PAGE                                        "checksum-page"
 #define CFGOPT_CIPHER_PASS                                          "cipher-pass"
@@ -95,6 +97,7 @@ Option constants
 #define CFGOPT_ONLINE                                               "online"
 #define CFGOPT_OUTPUT                                               "output"
 #define CFGOPT_PG                                                   "pg"
+#define CFGOPT_PG_VERSION_FORCE                                     "pg-version-force"
 #define CFGOPT_PROCESS                                              "process"
 #define CFGOPT_PROCESS_MAX                                          "process-max"
 #define CFGOPT_PROTOCOL_TIMEOUT                                     "protocol-timeout"
@@ -130,7 +133,7 @@ Option constants
 #define CFGOPT_TYPE                                                 "type"
 #define CFGOPT_VERBOSE                                              "verbose"
 
-#define CFG_OPTION_TOTAL                                            158
+#define CFG_OPTION_TOTAL                                            165
 
 /***********************************************************************************************************************************
 Option value constants
@@ -327,6 +330,7 @@ typedef enum
     cfgCmdExpire,
     cfgCmdHelp,
     cfgCmdInfo,
+    cfgCmdManifest,
     cfgCmdRepoCreate,
     cfgCmdRepoGet,
     cfgCmdRepoLs,
@@ -371,6 +375,7 @@ typedef enum
     cfgOptArchivePushQueueMax,
     cfgOptArchiveTimeout,
     cfgOptBackupStandby,
+    cfgOptBeta,
     cfgOptBufferSize,
     cfgOptChecksumPage,
     cfgOptCipherPass,
@@ -429,6 +434,7 @@ typedef enum
     cfgOptPgPort,
     cfgOptPgSocketPath,
     cfgOptPgUser,
+    cfgOptPgVersionForce,
     cfgOptProcess,
     cfgOptProcessMax,
     cfgOptProtocolTimeout,
@@ -444,6 +450,11 @@ typedef enum
     cfgOptRepoAzureKeyType,
     cfgOptRepoAzureUriStyle,
     cfgOptRepoBlock,
+    cfgOptRepoBlockAgeMap,
+    cfgOptRepoBlockChecksumSizeMap,
+    cfgOptRepoBlockSizeMap,
+    cfgOptRepoBlockSizeSuper,
+    cfgOptRepoBlockSizeSuperFull,
     cfgOptRepoBundle,
     cfgOptRepoBundleLimit,
     cfgOptRepoBundleSize,

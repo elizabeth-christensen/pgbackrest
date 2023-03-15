@@ -453,7 +453,9 @@ backupListAdd(
     // info:repository section
     KeyValue *repoInfo = kvPutKv(infoInfo, INFO_KEY_REPOSITORY_VAR);
 
-    kvPut(repoInfo, KEY_SIZE_VAR, VARUINT64(backupData->backupInfoRepoSize));
+    if (backupData->backupInfoRepoSizeMap == NULL)
+        kvPut(repoInfo, KEY_SIZE_VAR, VARUINT64(backupData->backupInfoRepoSize));
+
     kvPut(repoInfo, KEY_DELTA_VAR, VARUINT64(backupData->backupInfoRepoSizeDelta));
 
     if (outputJson && backupData->backupInfoRepoSizeMap != NULL)
@@ -532,8 +534,9 @@ backupListAdd(
                 {
                     kvPut(varKv(link), KEY_NAME_VAR, varNewStr(target->file));
                     kvPut(
-                        varKv(link), KEY_DESTINATION_VAR, varNewStr(strNewFmt("%s/%s", strZ(target->path),
-                        strZ(target->file))));
+                        varKv(link), KEY_DESTINATION_VAR,
+                        varNewStr(strNewFmt("%s/%s", strZ(target->path), strZ(target->file))));
+
                     varLstAdd(linkSection, link);
                 }
                 else
@@ -884,12 +887,14 @@ formatTextBackup(const DbGroup *dbGroup, String *resultStr)
             strZ(strSizeFormat(varUInt64Force(kvGet(info, KEY_DELTA_VAR)))));
 
         KeyValue *repoInfo = varKv(kvGet(info, INFO_KEY_REPOSITORY_VAR));
+        const Variant *const repoSizeInfo = kvGet(repoInfo, KEY_SIZE_VAR);
 
-        strCatFmt(
-            resultStr, "            repo%u: backup set size: %s, backup size: %s\n",
-            varUInt(kvGet(varKv(kvGet(backupInfo, KEY_DATABASE_VAR)), KEY_REPO_KEY_VAR)),
-            strZ(strSizeFormat(varUInt64Force(kvGet(repoInfo, KEY_SIZE_VAR)))),
-            strZ(strSizeFormat(varUInt64Force(kvGet(repoInfo, KEY_DELTA_VAR)))));
+        strCatFmt(resultStr, "            repo%u: ", varUInt(kvGet(varKv(kvGet(backupInfo, KEY_DATABASE_VAR)), KEY_REPO_KEY_VAR)));
+
+        if (repoSizeInfo != NULL)
+            strCatFmt(resultStr, "backup set size: %s, ", strZ(strSizeFormat(varUInt64Force(kvGet(repoInfo, KEY_SIZE_VAR)))));
+
+        strCatFmt(resultStr, "backup size: %s\n", strZ(strSizeFormat(varUInt64Force(kvGet(repoInfo, KEY_DELTA_VAR)))));
 
         if (kvGet(backupInfo, BACKUP_KEY_REFERENCE_VAR) != NULL)
         {
@@ -1501,9 +1506,10 @@ infoRender(void)
                     KeyValue *backupLockKv = varKv(kvGet(lockKv, STATUS_KEY_LOCK_BACKUP_VAR));
                     bool backupLockHeld = varBool(kvGet(backupLockKv, STATUS_KEY_LOCK_BACKUP_HELD_VAR));
                     const Variant *const percentComplete = kvGet(backupLockKv, STATUS_KEY_LOCK_BACKUP_PERCENT_COMPLETE_VAR);
-                    const String *const percentCompleteStr = percentComplete != NULL ?
-                        strNewFmt(" - %u.%02u%% complete", varUInt(percentComplete) / 100, varUInt(percentComplete) % 100) :
-                        EMPTY_STR;
+                    const String *const percentCompleteStr =
+                        percentComplete != NULL ?
+                            strNewFmt(" - %u.%02u%% complete", varUInt(percentComplete) / 100, varUInt(percentComplete) % 100) :
+                            EMPTY_STR;
 
                     if (statusCode != INFO_STANZA_STATUS_CODE_OK)
                     {
@@ -1552,7 +1558,6 @@ infoRender(void)
                                     }
                                     else
                                     {
-
                                         strCatFmt(
                                             resultStr, INFO_STANZA_STATUS_ERROR " (%s)\n",
                                             strZ(varStr(kvGet(repoStatus, STATUS_KEY_MESSAGE_VAR))));

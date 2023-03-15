@@ -1,6 +1,7 @@
 /***********************************************************************************************************************************
 Test Block Cipher
 ***********************************************************************************************************************************/
+#include "common/io/bufferRead.h"
 #include "common/io/filter/filter.h"
 #include "common/io/io.h"
 #include "common/type/json.h"
@@ -76,9 +77,8 @@ testRun(void)
         TEST_ERROR(
             cipherBlockNewP(cipherModeEncrypt, cipherTypeNone, BUFSTRZ(TEST_PASS)), AssertError, "unable to load cipher 'none'");
         TEST_ERROR(
-            cipherBlockNewP(
-                cipherModeEncrypt, cipherTypeAes256Cbc, testPass, .digest = STRDEF(BOGUS_STR)), AssertError,
-                "unable to load digest 'BOGUS'");
+            cipherBlockNewP(cipherModeEncrypt, cipherTypeAes256Cbc, testPass, .digest = STRDEF(BOGUS_STR)), AssertError,
+            "unable to load digest 'BOGUS'");
 
         // Initialization of object
         // -------------------------------------------------------------------------------------------------------------------------
@@ -359,7 +359,7 @@ testRun(void)
                 BUFSTRZ(
                     "12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"
                     "12345678901234567890123456789012345678901234567890")),
-                "add 160 bytes");
+            "add 160 bytes");
         TEST_RESULT_VOID(
             ioFilterProcessIn(hash, BUFSTRZ("12345678901234567890123456789001234567890012345678901234")), "add 58 bytes");
 
@@ -403,6 +403,67 @@ testRun(void)
                     BUFSTRDEF("20170412"))),
             "8b05c497afe9e1f42c8ada4cb88392e118649db1e5c98f0f0fb0a158bdd2dd76",
             "    check hmac");
+    }
+
+    // *****************************************************************************************************************************
+    if (testBegin("XxHash"))
+    {
+        // -------------------------------------------------------------------------------------------------------------------------
+        TEST_TITLE("xxHashOne");
+
+        TEST_RESULT_STR_Z(
+            strNewEncode(encodingHex, xxHashOne(16, BUFSTRDEF(""))), "99aa06d3014798d86001c324468d497f", "check empty hash 16");
+        TEST_RESULT_STR_Z(
+            strNewEncode(encodingHex, xxHashOne(16, BUFSTRDEF("12345\n"))), "1a3e11127b8856b804f0f99dc9fa4b56",
+            "check small hash 16");
+
+        TEST_RESULT_STR_Z(strNewEncode(encodingHex, xxHashOne(5, BUFSTRDEF(""))), "99aa06d301", "check empty hash 5");
+        TEST_RESULT_STR_Z(strNewEncode(encodingHex, xxHashOne(5, BUFSTRDEF("12345\n"))), "1a3e11127b", "check small hash 5");
+
+        // -------------------------------------------------------------------------------------------------------------------------
+        TEST_TITLE("XxHash");
+
+        ioBufferSizeSet(2);
+
+        const Buffer *message = BUFSTRDEF("");
+        IoRead *read = ioBufferReadNew(message);
+        ioFilterGroupAdd(ioReadFilterGroup(read), xxHashNew(16));
+
+        ioReadDrain(read);
+
+        TEST_RESULT_STR_Z(
+            strNewEncode(encodingHex, pckReadBinP(ioFilterGroupResultP(ioReadFilterGroup(read), XX_HASH_FILTER_TYPE))),
+            "99aa06d3014798d86001c324468d497f", "check empty hash 16");
+
+        message = BUFSTRDEF("12345\n");
+        read = ioBufferReadNew(message);
+        ioFilterGroupAdd(ioReadFilterGroup(read), xxHashNew(16));
+
+        ioReadDrain(read);
+
+        TEST_RESULT_STR_Z(
+            strNewEncode(encodingHex, pckReadBinP(ioFilterGroupResultP(ioReadFilterGroup(read), XX_HASH_FILTER_TYPE))),
+            "1a3e11127b8856b804f0f99dc9fa4b56", "check small hash 16");
+
+        message = BUFSTRDEF("");
+        read = ioBufferReadNew(message);
+        ioFilterGroupAdd(ioReadFilterGroup(read), xxHashNew(5));
+
+        ioReadDrain(read);
+
+        TEST_RESULT_STR_Z(
+            strNewEncode(encodingHex, pckReadBinP(ioFilterGroupResultP(ioReadFilterGroup(read), XX_HASH_FILTER_TYPE))),
+            "99aa06d301", "check empty hash 5");
+
+        message = BUFSTRDEF("12345\n");
+        read = ioBufferReadNew(message);
+        ioFilterGroupAdd(ioReadFilterGroup(read), xxHashNew(5));
+
+        ioReadDrain(read);
+
+        TEST_RESULT_STR_Z(
+            strNewEncode(encodingHex, pckReadBinP(ioFilterGroupResultP(ioReadFilterGroup(read), XX_HASH_FILTER_TYPE))),
+            "1a3e11127b", "check small hash 5");
     }
 
     FUNCTION_HARNESS_RETURN_VOID();

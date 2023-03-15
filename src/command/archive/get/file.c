@@ -3,8 +3,8 @@ Archive Get File
 ***********************************************************************************************************************************/
 #include "build.auto.h"
 
-#include "command/archive/get/file.h"
 #include "command/archive/common.h"
+#include "command/archive/get/file.h"
 #include "command/control/common.h"
 #include "common/compress/helper.h"
 #include "common/crypto/cipherBlock.h"
@@ -70,7 +70,7 @@ archiveGetFile(
 
                 if (compressType != compressTypeNone)
                 {
-                    ioFilterGroupAdd(ioWriteFilterGroup(storageWriteIo(destination)), decompressFilter(compressType));
+                    ioFilterGroupAdd(ioWriteFilterGroup(storageWriteIo(destination)), decompressFilterP(compressType));
                     compressible = false;
                 }
 

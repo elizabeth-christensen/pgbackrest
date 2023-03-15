@@ -4,8 +4,8 @@ Harness for Manifest Testing
 #ifndef TEST_COMMON_HARNESS_MANIFEST_H
 #define TEST_COMMON_HARNESS_MANIFEST_H
 
-#include "info/manifest.h"
 #include "common/user.h"
+#include "info/manifest.h"
 
 /***********************************************************************************************************************************
 Add db to manifest
@@ -28,11 +28,11 @@ Add file to manifest
 typedef struct HrnManifestFile
 {
     const char *name;                                               // See ManifestFile for comments
-    bool copy:1;
-    bool delta:1;
-    bool resume:1;
-    bool checksumPage:1;
-    bool checksumPageError:1;
+    bool copy : 1;
+    bool delta : 1;
+    bool resume : 1;
+    bool checksumPage : 1;
+    bool checksumPageError : 1;
     mode_t mode;
     const char *checksumSha1;
     const char *checksumRepoSha1;
@@ -42,7 +42,8 @@ typedef struct HrnManifestFile
     const char *reference;
     uint64_t bundleId;
     uint64_t bundleOffset;
-    uint64_t blockIncrSize;
+    size_t blockIncrSize;
+    size_t blockIncrChecksumSize;
     uint64_t blockIncrMapSize;
     uint64_t size;
     uint64_t sizeRepo;

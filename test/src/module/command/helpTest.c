@@ -98,17 +98,24 @@ testRun(void)
     if (testBegin("helpRenderText()"))
     {
         TEST_RESULT_STR_Z(
-            helpRenderText(STRDEF("this is a short sentence"), false, 0, false, 80), "this is a short sentence", "one line");
+            helpRenderText(STRDEF("this is a short sentence"), false, false, 0, false, 80), "this is a short sentence", "one line");
 
         TEST_RESULT_STR_Z(
-            helpRenderText(STRDEF("this is a short sentence"), false, 4, false, 14),
+            helpRenderText(STRDEF("this is a short sentence"), false, false, 4, false, 14),
             "this is a\n"
             "    short\n"
             "    sentence",
             "three lines, no indent first");
 
         TEST_RESULT_STR_Z(
-            helpRenderText(STRDEF("This is a short paragraph.\n\nHere is another one."), true, 2, true, 16),
+            helpRenderText(STRDEF("this is a short sentence"), true, true, 4, true, 132),
+            "    this is a short sentence\n"
+            "\n"
+            "    FOR BETA TESTING ONLY. DO NOT USE IN PRODUCTION.",
+            "beta feature");
+
+        TEST_RESULT_STR_Z(
+            helpRenderText(STRDEF("This is a short paragraph.\n\nHere is another one."), true, false, 2, true, 16),
             "  This is a\n"
             "  short\n"
             "  paragraph.\n"
@@ -276,8 +283,8 @@ testRun(void)
             "                                    [default=storage.googleapis.com]\n"
             "  --repo-gcs-key                    GCS repository key\n"
             "  --repo-gcs-key-type               GCS repository key type [default=service]\n"
-            "  --repo-host                       repository host when operating remotely via\n"
-            "                                    SSH [current=backup.example.net]\n"
+            "  --repo-host                       repository host when operating remotely\n"
+            "                                    [current=backup.example.net]\n"
             "  --repo-host-ca-file               repository host certificate authority file\n"
             "  --repo-host-ca-path               repository host certificate authority path\n"
             "  --repo-host-cert-file             repository host certificate file\n"

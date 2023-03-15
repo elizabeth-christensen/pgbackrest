@@ -7,8 +7,8 @@ Developed against version r131 using the documentation in https://github.com/lz4
 
 #ifdef HAVE_LIBLZ4
 
-#include <stdio.h>
 #include <lz4frame.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "common/compress/lz4/common.h"
@@ -23,7 +23,7 @@ Developed against version r131 using the documentation in https://github.com/lz4
 Older versions of lz4 do not define the max header size.  This seems to be the max for any version.
 ***********************************************************************************************************************************/
 #ifndef LZ4F_HEADER_SIZE_MAX
-    #define LZ4F_HEADER_SIZE_MAX                                    19
+#define LZ4F_HEADER_SIZE_MAX                                        19
 #endif
 
 /***********************************************************************************************************************************
@@ -243,10 +243,11 @@ lz4CompressInputSame(const THIS_VOID)
 
 /**********************************************************************************************************************************/
 FN_EXTERN IoFilter *
-lz4CompressNew(int level)
+lz4CompressNew(const int level, const bool raw)
 {
     FUNCTION_LOG_BEGIN(logLevelTrace);
         FUNCTION_LOG_PARAM(INT, level);
+        FUNCTION_LOG_PARAM(BOOL, raw);
     FUNCTION_LOG_END();
 
     ASSERT(level >= LZ4_COMPRESS_LEVEL_MIN && level <= LZ4_COMPRESS_LEVEL_MAX);
@@ -259,7 +260,11 @@ lz4CompressNew(int level)
 
         *driver = (Lz4Compress)
         {
-            .prefs = {.compressionLevel = level, .frameInfo = {.contentChecksumFlag = LZ4F_contentChecksumEnabled}},
+            .prefs =
+            {
+                .compressionLevel = level,
+                .frameInfo = {.contentChecksumFlag = raw ? LZ4F_noContentChecksum : LZ4F_contentChecksumEnabled},
+            },
             .first = true,
             .buffer = bufNew(0),
         };
@@ -278,6 +283,7 @@ lz4CompressNew(int level)
             PackWrite *const packWrite = pckWriteNewP();
 
             pckWriteI32P(packWrite, level);
+            pckWriteBoolP(packWrite, raw);
             pckWriteEndP(packWrite);
 
             paramList = pckMove(pckWriteResult(packWrite), memContextPrior());

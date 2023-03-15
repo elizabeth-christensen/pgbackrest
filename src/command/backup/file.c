@@ -39,13 +39,14 @@ segmentNumber(const String *pgFile)
 /**********************************************************************************************************************************/
 FN_EXTERN List *
 backupFile(
-    const String *const repoFile, const uint64_t bundleId, const unsigned int blockIncrReference,
+    const String *const repoFile, const uint64_t bundleId, const bool bundleRaw, const unsigned int blockIncrReference,
     const CompressType repoFileCompressType, const int repoFileCompressLevel, const CipherType cipherType,
     const String *const cipherPass, const List *const fileList)
 {
     FUNCTION_LOG_BEGIN(logLevelDebug);
         FUNCTION_LOG_PARAM(STRING, repoFile);                       // Repo file
         FUNCTION_LOG_PARAM(UINT64, bundleId);                       // Bundle id (0 if none)
+        FUNCTION_LOG_PARAM(BOOL, bundleRaw);                        // Raw compress/encrypt format in bundles?
         FUNCTION_LOG_PARAM(UINT, blockIncrReference);               // Block incremental reference to use in map
         FUNCTION_LOG_PARAM(ENUM, repoFileCompressType);             // Compress type for repo file
         FUNCTION_LOG_PARAM(INT, repoFileCompressLevel);             // Compression level for repo file
@@ -213,12 +214,18 @@ backupFile(
                     }
 
                     // Compress filter
-                    IoFilter *const compress = repoFileCompressType != compressTypeNone ?
-                        compressFilter(repoFileCompressType, repoFileCompressLevel) : NULL;
+                    IoFilter *const compress =
+                        repoFileCompressType != compressTypeNone ?
+                            compressFilterP(
+                                repoFileCompressType, repoFileCompressLevel, .raw = bundleRaw || file->blockIncrSize != 0) :
+                            NULL;
 
                     // Encrypt filter
-                    IoFilter *const encrypt = cipherType != cipherTypeNone ?
-                        cipherBlockNewP(cipherModeEncrypt, cipherType, BUFSTR(cipherPass), .raw = file->blockIncrSize != 0) : NULL;
+                    IoFilter *const encrypt =
+                        cipherType != cipherTypeNone ?
+                            cipherBlockNewP(
+                                cipherModeEncrypt, cipherType, BUFSTR(cipherPass), .raw = bundleRaw || file->blockIncrSize != 0) :
+                            NULL;
 
                     // If block incremental then add the filter and pass compress/encrypt filters to it since each block is
                     // compressed/encrypted separately
@@ -245,11 +252,10 @@ backupFile(
 
                         // Add block incremental filter
                         ioFilterGroupAdd(
-                            ioReadFilterGroup(
-                                storageReadIo(read)),
-                                blockIncrNew(
-                                    (size_t)file->blockIncrSize, blockIncrReference, bundleId, bundleOffset, blockMap, compress,
-                                    encrypt));
+                            ioReadFilterGroup(storageReadIo(read)),
+                            blockIncrNew(
+                                file->blockIncrSuperSize, file->blockIncrSize, file->blockIncrChecksumSize, blockIncrReference,
+                                bundleId, bundleOffset, blockMap, compress, encrypt));
 
                         repoChecksum = true;
                     }
