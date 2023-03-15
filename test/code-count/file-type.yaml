@@ -519,6 +519,14 @@ src/command/local/local.h:
   class: core
   type: c/h
 
+src/command/manifest/manifest.c:
+  class: core
+  type: c
+
+src/command/manifest/manifest.h:
+  class: core
+  type: c/h
+
 src/command/remote/remote.c:
   class: core
   type: c
@@ -2388,6 +2396,10 @@ test/src/module/command/infoTest.c:
   type: c
 
 test/src/module/command/localTest.c:
+  class: test/module
+  type: c
+
+test/src/module/command/manifestTest.c:
   class: test/module
   type: c
 
