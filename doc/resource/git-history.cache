@@ -1,5 +1,11 @@
 [
     {
+        "commit": "78c036efb7ebf7060949f3d2f2e6d93986734414",
+        "date": "2023-03-16 17:46:32 +0700",
+        "subject": "Updates required for new manifest command to work remotely.",
+        "body": "Additional options are required and the BlockChecksum must work remotely."
+    },
+    {
         "commit": "505a639f1e627b506c2e5a3351e8d4aacae9ed0b",
         "date": "2023-03-14 21:56:05 +0700",
         "subject": "Prototype manifest command.",
