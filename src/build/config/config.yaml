@@ -37,6 +37,7 @@ command:
     lock-remote-required: true
     lock-required: true
     lock-type: backup
+    lock-repo: true
     log-file: false
 
   archive-get:
@@ -65,6 +66,7 @@ command:
     lock-remote-required: true
     lock-required: true
     lock-type: backup
+    lock-repo: true
 
   check:
     command-role:
@@ -74,6 +76,7 @@ command:
   expire:
     lock-required: true
     lock-type: backup
+    lock-repo: true
 
   help:
     log-file: false

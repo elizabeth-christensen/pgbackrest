@@ -63,6 +63,7 @@ typedef struct BldCfgCommandRaw
     const String *logLevelDefault;
     bool lockRequired;
     bool lockRemoteRequired;
+    bool lockRepo;
     const String *lockType;
     bool parameterAllowed;
     StringList *roleList;
@@ -150,6 +151,10 @@ bldCfgParseCommandList(Yaml *const yaml)
                         {
                             cmdRaw.lockType = cmdDefVal.value;
                         }
+                        else if (strEqZ(cmdDef.value, "lock-repo"))
+                        {
+                            cmdRaw.lockRepo = yamlBoolParse(cmdDefVal);
+                        }
                         else if (strEqZ(cmdDef.value, "lock-remote-required"))
                         {
                             cmdRaw.lockRemoteRequired = yamlBoolParse(cmdDefVal);
@@ -199,6 +204,7 @@ bldCfgParseCommandList(Yaml *const yaml)
                     .logLevelDefault = strDup(cmdRaw.logLevelDefault),
                     .lockRequired = cmdRaw.lockRequired,
                     .lockRemoteRequired = cmdRaw.lockRemoteRequired,
+                    .lockRepo = cmdRaw.lockRepo,
                     .lockType = strDup(cmdRaw.lockType),
                     .parameterAllowed = cmdRaw.parameterAllowed,
                     .roleList = strLstDup(cmdRaw.roleList)

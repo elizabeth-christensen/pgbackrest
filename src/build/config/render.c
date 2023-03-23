@@ -592,6 +592,9 @@ bldCfgRenderParseAutoC(const Storage *const storageRepo, const BldCfg bldCfg, co
         if (cmd->lockRemoteRequired)
             strCatZ(configCmd, "        PARSE_RULE_COMMAND_LOCK_REMOTE_REQUIRED(true),\n");
 
+        if (cmd->lockRepo)
+            strCatZ(configCmd, "        PARSE_RULE_COMMAND_LOCK_REPO(true),\n");
+
         strCatFmt(configCmd, "        PARSE_RULE_COMMAND_LOCK_TYPE(%s),\n", strZ(bldEnum("lockType", cmd->lockType)));
 
         if (cmd->logFile)

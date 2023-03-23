@@ -65,6 +65,9 @@ FN_EXTERN bool cfgLockRequired(void);
 // Does the command require a remote lock?
 FN_EXTERN bool cfgLockRemoteRequired(void);
 
+// Lock a specific repo?
+FN_EXTERN bool cfgLockRepo(void);
+
 // Lock type required for this command
 FN_EXTERN LockType cfgLockType(void);
 

@@ -66,6 +66,7 @@ typedef struct ParseRuleCommand
     unsigned int commandRoleValid : CFG_COMMAND_ROLE_TOTAL;         // Valid for the command role?
     bool lockRequired : 1;                                          // Is an immediate lock required?
     bool lockRemoteRequired : 1;                                    // Is a lock required on the remote?
+    bool lockRepo : 1;                                              // Lock a specific repo?
     unsigned int lockType : 2;                                      // Lock type required
     bool logFile : 1;                                               // Will the command log to a file?
     unsigned int logLevelDefault : 4;                               // Default log level
@@ -90,6 +91,9 @@ typedef struct ParseRuleCommand
 
 #define PARSE_RULE_COMMAND_LOCK_REMOTE_REQUIRED(lockRemoteRequiredParam)                                                           \
     .lockRemoteRequired = lockRemoteRequiredParam
+
+#define PARSE_RULE_COMMAND_LOCK_REPO(lockRepoParam)                                                                                \
+    .lockRepo = lockRepoParam
 
 #define PARSE_RULE_COMMAND_LOCK_TYPE(lockTypeParam)                                                                                \
     .lockType = lockTypeParam
@@ -1653,6 +1657,7 @@ configParse(const Storage *storage, unsigned int argListSize, const char *argLis
                     // Set command options
                     config->lockRequired = parseRuleCommand[config->command].lockRequired;
                     config->lockRemoteRequired = parseRuleCommand[config->command].lockRemoteRequired;
+                    config->lockRepo = parseRuleCommand[config->command].lockRepo;
                     config->lockType = (LockType)parseRuleCommand[config->command].lockType;
                     config->logFile = parseRuleCommand[config->command].logFile;
                     config->logLevelDefault = (LogLevel)parseRuleCommand[config->command].logLevelDefault;

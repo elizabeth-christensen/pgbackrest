@@ -73,6 +73,7 @@ typedef struct Config
     bool help;                                                      // Was help requested for the command?
     bool lockRequired;                                              // Is an immediate lock required?
     bool lockRemoteRequired;                                        // Is a lock required on the remote?
+    bool lockRepo;                                                  // Lock a specific repo?
     LockType lockType;                                              // Lock type required
     bool logFile;                                                   // Will the command log to a file?
     LogLevel logLevelDefault;                                       // Default log level

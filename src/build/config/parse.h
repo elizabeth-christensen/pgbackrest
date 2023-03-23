@@ -77,6 +77,7 @@ typedef struct BldCfgCommand
     const String *logLevelDefault;                                  // Default log level
     bool lockRequired;                                              // Is a lock required
     bool lockRemoteRequired;                                        // Is a remote lock required?
+    bool lockRepo;                                                  // Lock a specific repo?
     const String *lockType;                                         // Lock type
     bool parameterAllowed;                                          // Are command line parameters allowed?
     const StringList *roleList;                                     // Roles valid for the command

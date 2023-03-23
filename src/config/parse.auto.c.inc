@@ -335,6 +335,7 @@ static const ParseRuleCommand parseRuleCommand[CFG_COMMAND_TOTAL] =
         PARSE_RULE_COMMAND_NAME("annotate"),                                                                         // cmd/annotate
         PARSE_RULE_COMMAND_LOCK_REQUIRED(true),                                                                      // cmd/annotate
         PARSE_RULE_COMMAND_LOCK_REMOTE_REQUIRED(true),                                                               // cmd/annotate
+        PARSE_RULE_COMMAND_LOCK_REPO(true),                                                                          // cmd/annotate
         PARSE_RULE_COMMAND_LOCK_TYPE(lockTypeBackup),                                                                // cmd/annotate
         PARSE_RULE_COMMAND_LOG_LEVEL_DEFAULT(logLevelInfo),                                                          // cmd/annotate
                                                                                                                      // cmd/annotate
@@ -383,6 +384,7 @@ static const ParseRuleCommand parseRuleCommand[CFG_COMMAND_TOTAL] =
         PARSE_RULE_COMMAND_NAME("backup"),                                                                             // cmd/backup
         PARSE_RULE_COMMAND_LOCK_REQUIRED(true),                                                                        // cmd/backup
         PARSE_RULE_COMMAND_LOCK_REMOTE_REQUIRED(true),                                                                 // cmd/backup
+        PARSE_RULE_COMMAND_LOCK_REPO(true),                                                                            // cmd/backup
         PARSE_RULE_COMMAND_LOCK_TYPE(lockTypeBackup),                                                                  // cmd/backup
         PARSE_RULE_COMMAND_LOG_FILE(true),                                                                             // cmd/backup
         PARSE_RULE_COMMAND_LOG_LEVEL_DEFAULT(logLevelInfo),                                                            // cmd/backup
@@ -412,6 +414,7 @@ static const ParseRuleCommand parseRuleCommand[CFG_COMMAND_TOTAL] =
     (                                                                                                                  // cmd/expire
         PARSE_RULE_COMMAND_NAME("expire"),                                                                             // cmd/expire
         PARSE_RULE_COMMAND_LOCK_REQUIRED(true),                                                                        // cmd/expire
+        PARSE_RULE_COMMAND_LOCK_REPO(true),                                                                            // cmd/expire
         PARSE_RULE_COMMAND_LOCK_TYPE(lockTypeBackup),                                                                  // cmd/expire
         PARSE_RULE_COMMAND_LOG_FILE(true),                                                                             // cmd/expire
         PARSE_RULE_COMMAND_LOG_LEVEL_DEFAULT(logLevelInfo),                                                            // cmd/expire

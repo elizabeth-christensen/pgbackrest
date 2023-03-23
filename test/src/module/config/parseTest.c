@@ -1567,6 +1567,7 @@ testRun(void)
         TEST_RESULT_VOID(configParse(storageTest, strLstSize(argList), strLstPtr(argList), false), TEST_COMMAND_BACKUP " command");
         TEST_RESULT_INT(cfgCommand(), cfgCmdBackup, "command is " TEST_COMMAND_BACKUP);
         TEST_RESULT_BOOL(cfgLockRequired(), true, "backup command requires lock");
+        TEST_RESULT_BOOL(cfgLockRepo(), true, "backup command requires repo lock");
         TEST_RESULT_UINT(cfgLockType(), lockTypeBackup, "backup command requires backup lock type");
         TEST_RESULT_UINT(cfgLogLevelDefault(), logLevelInfo, "backup defaults to log level warn");
         TEST_RESULT_BOOL(cfgLogFile(), true, "backup command does file logging");
@@ -1823,6 +1824,7 @@ testRun(void)
 
         TEST_RESULT_STR_Z(jsonFromVar(varNewVarLst(cfgCommandJobRetry())), "[0]", "default job retry");
         TEST_RESULT_BOOL(cfgLockRequired(), true, "archive-push:async command requires lock");
+        TEST_RESULT_BOOL(cfgLockRepo(), false, "archive-push:async command does not require repo lock");
         TEST_RESULT_BOOL(cfgLogFile(), true, "archive-push:async command does file logging");
         TEST_RESULT_INT(cfgOptionInt64(cfgOptArchivePushQueueMax), 4503599627370496, "archive-push-queue-max is set");
         TEST_RESULT_UINT(cfgOptionUInt64(cfgOptArchivePushQueueMax), 4503599627370496, "archive-push-queue-max is set");

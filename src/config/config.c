@@ -186,6 +186,18 @@ cfgLockRemoteRequired(void)
 }
 
 /**********************************************************************************************************************************/
+FN_EXTERN bool
+cfgLockRepo(void)
+{
+    FUNCTION_TEST_VOID();
+
+    ASSERT(configLocal != NULL);
+    ASSERT(configLocal->command != cfgCmdNone);
+
+    FUNCTION_TEST_RETURN(BOOL, configLocal->lockRepo);
+}
+
+/**********************************************************************************************************************************/
 FN_EXTERN LockType
 cfgLockType(void)
 {
