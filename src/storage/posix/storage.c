@@ -433,6 +433,33 @@ storagePosixPathCreate(
 }
 
 /**********************************************************************************************************************************/
+static void
+storagePosixPathRemoveUnlink(StoragePosix *const this, const String *const file)
+{
+    FUNCTION_LOG_BEGIN(logLevelTrace);
+        FUNCTION_LOG_PARAM(STORAGE_POSIX, this);
+        FUNCTION_LOG_PARAM(STRING, file);
+    FUNCTION_LOG_END();
+
+    ASSERT(this != NULL);
+    ASSERT(file != NULL);
+
+    // Rather than stat the file to discover what type it is, just try to unlink it and see what happens
+    if (unlink(strZ(file)) == -1)                                                                                   // {vm_covered}
+    {
+        // These errors indicate that the entry is actually a path so we'll try to delete it that way
+        if (errno == EPERM || errno == EISDIR)                                   // {uncovered_branch - no EPERM on tested systems}
+        {
+            storageInterfacePathRemoveP(this, file, true);
+        }
+        // Else error unless the file is missing
+        else if (errno != ENOENT)                                                                                   // {vm_covered}
+            THROW_SYS_ERROR_FMT(PathRemoveError, STORAGE_ERROR_PATH_REMOVE_FILE, strZ(file));                       // {vm_covered}
+    }
+
+    FUNCTION_LOG_RETURN_VOID();
+}
+
 static bool
 storagePosixPathRemove(THIS_VOID, const String *path, bool recurse, StorageInterfacePathRemoveParam param)
 {
@@ -463,20 +490,7 @@ storagePosixPathRemove(THIS_VOID, const String *path, bool recurse, StorageInter
                 {
                     for (unsigned int listIdx = 0; listIdx < storageLstSize(list); listIdx++)
                     {
-                        const String *const file = strNewFmt("%s/%s", strZ(path), strZ(storageLstGet(list, listIdx).name));
-
-                        // Rather than stat the file to discover what type it is, just try to unlink it and see what happens
-                        if (unlink(strZ(file)) == -1)                                                               // {vm_covered}
-                        {
-                            // These errors indicate that the entry is actually a path so we'll try to delete it that way
-                            if (errno == EPERM || errno == EISDIR)               // {uncovered_branch - no EPERM on tested systems}
-                            {
-                                storageInterfacePathRemoveP(this, file, true);
-                            }
-                            // Else error
-                            else
-                                THROW_SYS_ERROR_FMT(PathRemoveError, STORAGE_ERROR_PATH_REMOVE_FILE, strZ(file));   // {vm_covered}
-                        }
+                        storagePosixPathRemoveUnlink(this, strNewFmt("%s/%s", strZ(path), strZ(storageLstGet(list, listIdx).name)));
 
                         // Reset the memory context occasionally so we don't use too much memory or slow down processing
                         MEM_CONTEXT_TEMP_RESET(1000);

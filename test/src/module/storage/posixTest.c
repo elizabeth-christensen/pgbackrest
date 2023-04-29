@@ -823,6 +823,11 @@ testRun(void)
             storagePathRemoveP(storageTest, pathRemove1, .recurse = true), "remove path");
         TEST_RESULT_BOOL(
             storageExistsP(storageTest, pathRemove1), false, "path is removed");
+
+        // -------------------------------------------------------------------------------------------------------------------------
+        TEST_TITLE("ignore missing file");
+
+        TEST_RESULT_VOID(storagePosixPathRemoveUnlink(storageDriver(storageTest), STRDEF(TEST_PATH "/xxx")), "remove missing file");
 #endif // TEST_CONTAINER_REQUIRED
 
         // -------------------------------------------------------------------------------------------------------------------------
