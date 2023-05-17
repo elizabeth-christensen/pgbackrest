@@ -235,28 +235,12 @@ my $oyVm =
     },
 
     # Ubuntu 18.04
-    &VM_U18 =>
+    'u18' =>
     {
         &VM_OS_BASE => VM_OS_BASE_DEBIAN,
         &VM_IMAGE => 'ubuntu:18.04',
         &VM_ARCH => VM_ARCH_AMD64,
         &VMDEF_PGSQL_BIN => '/usr/lib/postgresql/{[version]}/bin',
-
-        &VMDEF_WITH_ZST => true,
-
-        &VM_DB =>
-        [
-            PG_VERSION_93,
-            PG_VERSION_94,
-            PG_VERSION_95,
-            PG_VERSION_96,
-        ],
-
-        &VM_DB_TEST =>
-        [
-            PG_VERSION_93,
-            PG_VERSION_94,
-        ],
     },
 
     # Ubuntu 20.04
