@@ -94,7 +94,7 @@
     {
         "commit": "3fc3690dd77ef5fa032abb006558184164db53ec",
         "date": "2023-04-27 10:30:50 +0300",
-        "subject": "PostgreSQL 16 Support.",
+        "subject": "PostgreSQL 16 support.",
         "body": "Add catalog version and WAL magic for PostgreSQL 16.\r\n\r\nThe GUC to force parallel mode has be renamed so update that in the tests."
     },
     {
