@@ -238,12 +238,12 @@ pgbackrest/test/test.pl --vm=none --dry-run
     P00   INFO: test begin on x86_64 - log level info
     P00   INFO: clean autogenerate code
     P00   INFO: builds required: bin
---> P00   INFO: 77 tests selected
+--> P00   INFO: 79 tests selected
                 
-    P00   INFO: P1-T01/77 - vm=none, module=common, test=error
-           [filtered 74 lines of output]
-    P00   INFO: P1-T76/77 - vm=none, module=performance, test=type
-    P00   INFO: P1-T77/77 - vm=none, module=performance, test=storage
+    P00   INFO: P1-T01/79 - vm=none, module=common, test=error
+           [filtered 76 lines of output]
+    P00   INFO: P1-T78/79 - vm=none, module=performance, test=type
+    P00   INFO: P1-T79/79 - vm=none, module=performance, test=storage
 --> P00   INFO: DRY RUN COMPLETED SUCCESSFULLY
 ```
 
@@ -264,35 +264,35 @@ pgbackrest/test/test.pl --vm=none --vm-out --module=common --test=wait
                 
     P00   INFO: P1-T1/1 - vm=none, module=common, test=wait
                 
-        2023-03-20 00:52:17.889 P00   INFO: test command begin 2.45: [common/wait] --log-level=info --repo-path=/home/vagrant/test/repo --test-path=/home/vagrant/test --vm=none --vm-id=0
-        2023-03-20 00:52:20.376 P00   INFO: test command end: completed successfully (2487ms)
+        2023-05-17 08:11:19.730 P00   INFO: test command begin 2.46: [common/wait] --log-level=info --repo-path=/home/vagrant/test/repo --test-path=/home/vagrant/test --vm=none --vm-id=0
+        2023-05-17 08:11:22.188 P00   INFO: test command end: completed successfully (2458ms)
         run 1 - waitNew(), waitMore, and waitFree()
-            000.009s          L0018     expect AssertError: assertion 'waitTime <= 999999000' failed
+            000.010s          L0018     expect AssertError: assertion 'waitTime <= 999999000' failed
         
         run 1/1 ------------- L0021 0ms wait
-            001.775s 001.766s L0025     new wait
-            001.785s 000.010s L0026         check remaining time
-            001.786s 000.001s L0027         check wait time
-            001.787s 000.001s L0028         check sleep time
-            001.788s 000.001s L0029         check sleep prev time
-            001.789s 000.001s L0030         no wait more
-            001.794s 000.005s L0033     new wait = 0.2 sec
-            001.795s 000.001s L0034         check remaining time
-            001.796s 000.001s L0035         check wait time
-            001.797s 000.001s L0036         check sleep time
-            001.798s 000.001s L0037         check sleep prev time
-            001.798s 000.000s L0038         check begin time
-            001.997s 000.199s L0044         lower range check
-            001.998s 000.001s L0045         upper range check
-            001.999s 000.001s L0047         free wait
-            002.000s 000.001s L0052     new wait = 1.1 sec
-            002.002s 000.002s L0053         check wait time
-            002.002s 000.000s L0054         check sleep time
-            002.003s 000.001s L0055         check sleep prev time
-            002.004s 000.001s L0056         check begin time
-            003.102s 001.098s L0062         lower range check
-            003.103s 000.001s L0063         upper range check
-            003.103s 000.000s L0065         free wait
+            001.715s 001.705s L0025     new wait
+            001.726s 000.011s L0026         check remaining time
+            001.727s 000.001s L0027         check wait time
+            001.728s 000.001s L0028         check sleep time
+            001.729s 000.001s L0029         check sleep prev time
+            001.730s 000.001s L0030         no wait more
+            001.735s 000.005s L0033     new wait = 0.2 sec
+            001.736s 000.001s L0034         check remaining time
+            001.737s 000.001s L0035         check wait time
+            001.738s 000.001s L0036         check sleep time
+            001.739s 000.001s L0037         check sleep prev time
+            001.740s 000.001s L0038         check begin time
+            001.938s 000.198s L0044         lower range check
+            001.938s 000.000s L0045         upper range check
+            001.939s 000.001s L0047         free wait
+            001.941s 000.002s L0052     new wait = 1.1 sec
+            001.942s 000.001s L0053         check wait time
+            001.943s 000.001s L0054         check sleep time
+            001.944s 000.001s L0055         check sleep prev time
+            001.945s 000.001s L0056         check begin time
+            003.043s 001.098s L0062         lower range check
+            003.044s 000.001s L0063         upper range check
+            003.044s 000.000s L0065         free wait
         
         TESTS COMPLETED SUCCESSFULLY
     
@@ -337,7 +337,9 @@ pgbackrest/test/test.pl --vm-build --vm=u20
 --- output ---
 
     P00   INFO: test begin on x86_64 - log level info
-    P00   INFO: Using cached pgbackrest/test:u20-base-20221220A image (2db467d873c0aff06335592c8a22b8441b5c6440) ...
+    P00   INFO: Building pgbackrest/test:u20-base image (31c2124ab0db03d97eb6324e12e22eb64eb4a3b8) ...
+    P00   WARN: process has been running for 300 seconds with no output
+    P00   WARN: process has been running for 300 seconds with no output
     P00   INFO: Building pgbackrest/test:u20-test image ...
     P00   INFO: Build Complete
 ```
