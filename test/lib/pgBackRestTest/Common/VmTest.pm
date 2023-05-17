@@ -240,6 +240,7 @@ my $oyVm =
         &VM_OS_BASE => VM_OS_BASE_DEBIAN,
         &VM_IMAGE => 'ubuntu:18.04',
         &VM_ARCH => VM_ARCH_AMD64,
+        &VM_DEPRECATED => true,
         &VMDEF_PGSQL_BIN => '/usr/lib/postgresql/{[version]}/bin',
     },
 
