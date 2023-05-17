@@ -35,7 +35,6 @@ Main
 #include "command/stanza/upgrade.h"
 #include "command/verify/verify.h"
 #include "common/debug.h"
-#include "common/error.h"
 #include "common/io/fdRead.h"
 #include "common/io/fdWrite.h"
 #include "common/stat.h"
@@ -48,6 +47,7 @@ Main
 #include "storage/gcs/helper.h"
 #include "storage/helper.h"
 #include "storage/s3/helper.h"
+#include "storage/sftp/helper.h"
 #include "version.h"
 
 /***********************************************************************************************************************************
@@ -69,6 +69,9 @@ main(int argListSize, const char *argList[])
         STORAGE_CIFS_HELPER,
         STORAGE_GCS_HELPER,
         STORAGE_S3_HELPER,
+#ifdef HAVE_LIBSSH2
+        STORAGE_SFTP_HELPER,
+#endif
         STORAGE_END_HELPER
     };
 
