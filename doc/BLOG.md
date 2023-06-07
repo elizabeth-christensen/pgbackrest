@@ -1,8 +1,20 @@
 # pgBackRest File Bundling and Block Incremental Backup
 
-Efficiently storing backups is a major priority for the pgBackRest project but we also strive to balance this goal with restore performance. Two recent features help with both efficiency and performance: file bundling and block incremental backup.
+[pgBackRest](https://github.com/pgbackrest/) is announcing version 2.46 this month with a number of notable new features, including  block incremental backup, file bundling, verify, backup key/value annotations, and SFTP repository storage. 
 
-To demonstrate these features we will create two repositories. The first repository will use defaults and the second will have file bundling and block incremental backup enabled.
+Efficiently storing backups is a major priority for the pgBackRest project. We also strive to balance this goal with restore performance. Two recent features help with both efficiency and performance: **file bundling and block incremental backup**. I wanted to call out these two features and provide some working examples to help users get started. 
+
+#### File bundling
+* combines smaller files together
+* improves speed on object stores like S3, Azure, GCS
+
+####  Block incremental backup
+* saves space by storing only changed file parts
+* improves the efficiency of the delta restore
+
+## Sample repository set up
+
+To demonstrate these features we will create two repositories. The first repository will use defaults. The second will have file bundling and block incremental backup enabled.
 
 Configure both repositories:
 ```
@@ -70,12 +82,12 @@ The `repo-bundle-limit` option limits the files that will be added to bundles. I
 
 Block incremental backup saves space in the repository by storing only the parts of the file that have changed since the last backup. The block size depends on the file size and when the file was last modified, i.e. larger, older files will get larger block sizes. Blocks are compressed and encrypted into super blocks that can be retrieved independently to make restore more efficient.
 
-To demonstrate block incremental we need to make some changes to the database. With `pgbench` we can update 100 random rows in the main table, which is about 1GB in size.
+To demonstrate the block incremental feature, we need to make some changes to the database. With `pgbench` we can update 100 random rows in the main table, which is about 1GB in size.
 ```
 $ /usr/lib/postgresql/12/bin/pgbench -n -b simple-update -t 100
 ```
 
-On repo1 the time to make a incremental backup is very similar to making a full backup. As previously discussed, PostgreSQL breaks tables up into 1GB segments so in our case the main table consists of a single file that contains most of the data in our database.
+On repo1 the time to make an incremental backup is very similar to making a full backup. As previously discussed, PostgreSQL breaks tables up into 1GB segments so in our case the main table consists of a single file that contains most of the data in our database.
 ```
 $ pgbackrest --stanza=demo --type=incr --repo=1 backup
 
@@ -117,7 +129,7 @@ incr backup: 20230520-082438F_20230520-083027I
     repo2: backup size: 943.3KB
 ```
 
-Block incremental also improves the efficiency of the delta restore command. Here we stop the cluster and perform a delta restore back to the full backup in repo 1:
+The block incremental feature also improves the efficiency of the delta restore command. Here we stop the cluster and perform a delta restore back to the full backup in repo 1:
 ```
 $ pg_ctlcluster 12 demo stop
 $ pgbackrest --stanza=demo --delta --repo=1 --set=20230526-053458F restore
