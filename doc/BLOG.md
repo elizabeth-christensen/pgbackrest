@@ -1,18 +1,12 @@
 # pgBackRest File Bundling and Block Incremental Backup
 
-[pgBackRest](https://github.com/pgbackrest/) is announcing version 2.46 this month with a number of notable new features, including  block incremental backup, file bundling, verify, backup key/value annotations, and SFTP repository storage. 
+[pgBackRest](https://github.com/pgbackrest/) recently released v2.46 with support for block incremental backup, which saves space in the repository by storing only changed parts of files. File bundling, released in v2.39, combines smaller files together for speed and cost savings, especially on object stores.
 
-Efficiently storing backups is a major priority for the pgBackRest project. We also strive to balance this goal with restore performance. Two recent features help with both efficiency and performance: **file bundling and block incremental backup**. I wanted to call out these two features and provide some working examples to help users get started. 
+Efficiently storing backups is a major priority for the pgBackRest project but we also strive to balance this goal with backup and restore performance. The file bundling and block incremental backup features improve backup and, in many cases, restore performance while also saving space in the repository.
 
-#### File bundling
-* combines smaller files together
-* improves speed on object stores like S3, Azure, GCS
+In this blog we will provide working examples to help you get started with these exciting features.
 
-####  Block incremental backup
-* saves space by storing only changed file parts
-* improves the efficiency of the delta restore
-
-## Sample repository set up
+## Sample Repository Setup
 
 To demonstrate these features we will create two repositories. The first repository will use defaults. The second will have file bundling and block incremental backup enabled.
 
